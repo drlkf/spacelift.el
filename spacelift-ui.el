@@ -78,6 +78,11 @@
   "Face for an in-progress stack state."
   :group 'spacelift)
 
+(defface spacelift-state-skipped-face
+  '((t :inherit shadow))
+  "Face for a skipped run state."
+  :group 'spacelift)
+
 (defface spacelift-label-face
   '((t :inherit font-lock-constant-face))
   "Face for stack labels."
@@ -171,6 +176,7 @@ Width and alignment flags (e.g. %-12s) are supported."
     ((or "INITIALIZING" "PLANNING" "APPLYING" "PREPARING" "QUEUED"
          "CONFIRMED" "UNCONFIRMED" "PENDING_REVIEW")
      'spacelift-state-progress-face)
+    ("SKIPPED" 'spacelift-state-skipped-face)
     (_ 'default)))
 
 (defun spacelift--propertize-state (state)
