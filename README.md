@@ -22,22 +22,38 @@ Load the package and call one of the entry points:
 prefix argument (`C-u`), you are prompted for a full-text search string.
 - `M-x spacelift-stack-show-buffer` prompts for a stack id and opens its detail
 buffer directly.
+- `M-x spacelift-run-list-buffer` prompts for a stack id and opens a buffer
+listing that stack's runs.
 
-In the stack list buffer, press `RET` on a stack to open its detail buffer.
+In the stack list buffer, press `RET` on a stack to open its detail buffer, or
+`R` to open its run list. In a run list buffer, press `RET` on a run to open its
+detail buffer.
 
-In every buffer:
+Stack list and stack detail buffers:
 
 | Key   | Action               |
 |-------|----------------------|
 | `r`   | Reload the buffer    |
 | `q`   | Quit the window      |
 | `RET` | Visit the stack (list buffer only) |
+| `R`   | Open the stack's run list |
+| `w`   | Browse the stack in the Spacelift console |
+| `j`/`k`, `n`/`p` | Move down/up (list buffer) |
+
+Run list and run detail buffers:
+
+| Key   | Action               |
+|-------|----------------------|
+| `r`   | Reload the buffer    |
+| `q`   | Quit the window      |
+| `RET` | Visit the run (list buffer only) |
+| `w`   | Browse the run URL in the Spacelift console |
 | `j`/`k`, `n`/`p` | Move down/up (list buffer) |
 
 These bindings work both with vanilla Emacs and with `evil-mode`. When `evil`
-is loaded, `r`, `q` and `RET` are bound in the `motion` and `normal` states so
-they are not shadowed by evil; navigation uses evil's own `j`/`k`. The `g` key
-is deliberately left to evil (e.g. `gg`), so use `r` to reload.
+is loaded, the keys are bound in the `motion` and `normal` states so they are
+not shadowed by evil; navigation uses evil's own `j`/`k`. The `g` key is
+deliberately left to evil (e.g. `gg`), so use `r` to reload.
 
 ## Customization
 
@@ -47,8 +63,10 @@ before each command (uses the current profile when nil).
 - `spacelift-login-offer`: when non-nil (the default), offer to log in when
 `spacectl` is not authenticated.
 - `spacelift-stack-line-format`: format string for a stack line.
+- `spacelift-run-line-format`: format string for a run line.
+- `spacelift-run-list-max-results`: default maximum number of runs fetched.
 
-Supported specifiers:
+Stack line specifiers:
 
 | Spec | Meaning            |
 |------|--------------------|
@@ -62,11 +80,27 @@ Supported specifiers:
 | `%d` | description        |
 | `%l` | comma-separated labels |
 
+Run line specifiers:
+
+| Spec | Meaning            |
+|------|--------------------|
+| `%i` | run id             |
+| `%s` | current state      |
+| `%t` | run title          |
+| `%b` | branch             |
+| `%c` | short commit hash  |
+| `%a` | commit author      |
+| `%d` | creation date      |
+| `%T` | trigger source     |
+| `%D` | resource delta (added/changed/deleted) |
+
 Width and alignment flags are supported, e.g. `%-30n`.
 
 ## Files
 
-- `spacelift-core.el`: low-level `spacectl` invocation and JSON parsing.
+- `spacelift-core.el`: low-level `spacectl` invocation, JSON parsing, and
+console URL helpers.
 - `spacelift-stack.el`: stack structs and API functions.
+- `spacelift-run.el`: run structs and API functions.
 - `spacelift-ui.el`: interactive buffers and major modes.
 - `spacelift.el`: top-level entry point.

@@ -33,6 +33,7 @@
 ;;
 ;; - `spacelift-stack-list-stacks' opens a buffer listing your stacks.
 ;; - `spacelift-stack-show-buffer' opens a buffer with a stack's details.
+;; - `spacelift-run-list-buffer' opens a buffer listing a stack's runs.
 ;;
 ;; See the README for setup instructions.
 
@@ -40,6 +41,7 @@
 
 (require 'spacelift-core)
 (require 'spacelift-stack)
+(require 'spacelift-run)
 (require 'spacelift-ui)
 
 (provide 'spacelift)

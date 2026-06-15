@@ -199,6 +199,37 @@ automatically, so the caller should be re-invoked after logging in."
      (spacelift-not-authenticated
       (spacelift--maybe-offer-login (cdr spacelift--err)))))
 
+;;; Account endpoint and console URLs
+
+(defvar spacelift--endpoint nil
+  "Cached Spacelift account endpoint URL, as reported by `spacectl whoami'.")
+
+(defun spacelift-endpoint (&optional refresh)
+  "Return the Spacelift account endpoint URL.
+For example, \"https://acme.app.spacelift.io\".  The value is queried
+once through `spacectl whoami' and cached.  With REFRESH non-nil, query
+`spacectl' again and update the cache."
+  (when (or refresh (null spacelift--endpoint))
+    (let* ((data (let ((json-object-type 'alist)
+                       (json-key-type 'symbol)
+                       (json-false nil)
+                       (json-null nil))
+                   (json-read-from-string (spacelift--run "whoami"))))
+           (endpoint (spacelift--alist-get 'endpoint data)))
+      (unless endpoint
+        (signal 'spacelift-error
+                (list "Could not determine the Spacelift account endpoint")))
+      (setq spacelift--endpoint (string-trim-right endpoint "/"))))
+  spacelift--endpoint)
+
+(defun spacelift-stack-url (stack-id)
+  "Return the Spacelift console URL for the stack identified by STACK-ID."
+  (format "%s/stack/%s" (spacelift-endpoint) stack-id))
+
+(defun spacelift-run-url (stack-id run-id)
+  "Return the Spacelift console URL for RUN-ID under stack STACK-ID."
+  (format "%s/stack/%s/run/%s" (spacelift-endpoint) stack-id run-id))
+
 ;;; Generic helpers
 
 (defun spacelift--alist-get (key object &optional default)
