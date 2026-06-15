@@ -27,7 +27,7 @@ listing that stack's runs.
 
 In the stack list buffer, press `RET` on a stack to open its detail buffer, or
 `R` to open its run list. In a run list buffer, press `RET` on a run to open its
-detail buffer.
+detail buffer, or `l` to view its logs.
 
 Stack list and stack detail buffers:
 
@@ -39,6 +39,7 @@ Stack list and stack detail buffers:
 | `RET` | Visit the stack (list buffer only) |
 | `R`   | Open the stack's run list |
 | `w`   | Browse the stack in the Spacelift console |
+| `l`   | View the stack's latest run logs (`C-u l` to follow/tail) |
 | `j`/`k`, `n`/`p` | Move down/up (list buffer) |
 
 Run list and run detail buffers:
@@ -50,7 +51,18 @@ Run list and run detail buffers:
 | `?`   | Show a magit-style popup of the available keys |
 | `RET` | Visit the run (list buffer only) |
 | `w`   | Browse the run URL in the Spacelift console |
+| `l`   | View the run's logs (`C-u l` to follow/tail) |
 | `j`/`k`, `n`/`p` | Move down/up (list buffer) |
+
+Run log buffers:
+
+| Key   | Action               |
+|-------|----------------------|
+| `r`   | Reload the logs      |
+| `G`   | Toggle following (tailing) the run |
+| `w`   | Browse the run URL in the Spacelift console |
+| `q`   | Stop the log process and quit the window |
+| `?`   | Show a magit-style popup of the available keys |
 
 These bindings work both with vanilla Emacs and with `evil-mode`. When `evil`
 is loaded, the keys are bound in the `motion` and `normal` states so they are

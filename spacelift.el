@@ -34,6 +34,8 @@
 ;; - `spacelift-stack-list-stacks' opens a buffer listing your stacks.
 ;; - `spacelift-stack-show-buffer' opens a buffer with a stack's details.
 ;; - `spacelift-run-list-buffer' opens a buffer listing a stack's runs.
+;; - `spacelift-run-show-logs' opens a buffer streaming a run's logs.
+;; - `spacelift-stack-show-latest-logs' streams a stack's latest run logs.
 ;;
 ;; See the README for setup instructions.
 

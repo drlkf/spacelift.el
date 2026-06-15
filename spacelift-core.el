@@ -108,6 +108,20 @@ valid credentials are available, or `spacelift-error' on other failures."
       (when (file-exists-p stderr-file)
         (delete-file stderr-file)))))
 
+(defun spacelift--run-async (buffer name &rest args)
+  "Run `spacectl' asynchronously with ARGS, streaming output into BUFFER.
+NAME is used to label the process.  Output (both stdout and stderr) is
+inserted into BUFFER as it arrives.  Returns the process object.  This is
+intended for long-running or streamed commands such as run logs."
+  (let* ((command (spacelift--command args))
+         (process (make-process
+                   :name name
+                   :buffer buffer
+                   :command command
+                   :connection-type 'pipe
+                   :noquery t)))
+    process))
+
 (defun spacelift--select-profile ()
   "Select `spacelift-profile' as the current `spacectl' profile, when set."
   (when spacelift-profile

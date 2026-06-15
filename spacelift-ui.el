@@ -28,7 +28,7 @@
 ;; Interactive buffers and major modes for browsing Spacelift stacks and
 ;; their runs.
 ;;
-;; Four read-only buffers are provided:
+;; Five read-only buffers are provided:
 ;;
 ;; - The stack list buffer (`spacelift-stack-list-mode'), one line per
 ;;   stack, formatted according to `spacelift-stack-line-format'.  Press
@@ -39,10 +39,13 @@
 ;;
 ;; - The run list buffer (`spacelift-run-list-mode'), one line per run,
 ;;   formatted according to `spacelift-run-line-format'.  Press RET on a
-;;   run to open its detail buffer.
+;;   run to open its detail buffer, or `l' to view its logs.
 ;;
 ;; - The run detail buffer (`spacelift-run-mode'), showing all available
 ;;   run information.
+;;
+;; - The run log buffer (`spacelift-run-log-mode'), streaming the logs of
+;;   a run with ANSI colors, optionally tailing it.
 ;;
 ;; In every buffer, `r' reloads the contents and `q' quits the window.
 ;; `w' browses the Spacelift console URL of the stack or run at point, and
@@ -51,6 +54,7 @@
 ;;; Code:
 
 (require 'cl-lib)
+(require 'ansi-color)
 (require 'browse-url)
 (require 'transient)
 (require 'spacelift-core)
@@ -228,9 +232,11 @@ Width and alignment flags (e.g. %-12s) are supported."
     ("k" "Previous line" previous-line :transient t)]
    ["Act"
     ("w" "Browse in console" spacelift-stack-list-browse)
+    ("l" "View latest logs" spacelift-stack-list-latest-logs)
     ("r" "Reload" spacelift-stack-list-refresh)]
    ["Window"
-    ("q" "Quit window" quit-window)]])
+    ("q" "Quit window" quit-window)
+    ("?" "Close help" transient-quit-one)]])
 
 (transient-define-prefix spacelift-stack-help ()
   "Show the available keys in a Spacelift stack detail buffer."
@@ -239,9 +245,11 @@ Width and alignment flags (e.g. %-12s) are supported."
     ("R" "List runs" spacelift-stack-runs)]
    ["Act"
     ("w" "Browse in console" spacelift-stack-browse)
+    ("l" "View latest logs" spacelift-stack-latest-logs)
     ("r" "Reload" spacelift-stack-refresh)]
    ["Window"
-    ("q" "Quit window" quit-window)]])
+    ("q" "Quit window" quit-window)
+    ("?" "Close help" transient-quit-one)]])
 
 (transient-define-prefix spacelift-run-list-help ()
   "Show the available keys in a Spacelift run list buffer."
@@ -252,18 +260,33 @@ Width and alignment flags (e.g. %-12s) are supported."
     ("k" "Previous line" previous-line :transient t)]
    ["Act"
     ("w" "Browse run URL" spacelift-run-browse)
+    ("l" "View logs" spacelift-run-logs)
     ("r" "Reload" spacelift-run-list-refresh)]
    ["Window"
-    ("q" "Quit window" quit-window)]])
+    ("q" "Quit window" quit-window)
+    ("?" "Close help" transient-quit-one)]])
 
 (transient-define-prefix spacelift-run-help ()
   "Show the available keys in a Spacelift run detail buffer."
   ["Spacelift run"
    ["Act"
     ("w" "Browse run URL" spacelift-run-browse)
+    ("l" "View logs" spacelift-run-logs)
     ("r" "Reload" spacelift-run-refresh)]
    ["Window"
-    ("q" "Quit window" quit-window)]])
+    ("q" "Quit window" quit-window)
+    ("?" "Close help" transient-quit-one)]])
+
+(transient-define-prefix spacelift-run-log-help ()
+  "Show the available keys in a Spacelift run log buffer."
+  ["Spacelift run logs"
+   ["Act"
+    ("w" "Browse in console" spacelift-run-log-browse)
+    ("r" "Reload logs" spacelift-run-log-refresh)
+    ("G" "Toggle tailing" spacelift-run-log-tail)]
+   ["Window"
+    ("q" "Quit window" spacelift-run-log-quit)
+    ("?" "Close help" transient-quit-one)]])
 
 (defun spacelift-help ()
   "Show a magit-style popup of the available keys for the current buffer."
@@ -274,6 +297,7 @@ Width and alignment flags (e.g. %-12s) are supported."
     ((derived-mode-p 'spacelift-stack-mode) #'spacelift-stack-help)
     ((derived-mode-p 'spacelift-run-list-mode) #'spacelift-run-list-help)
     ((derived-mode-p 'spacelift-run-mode) #'spacelift-run-help)
+    ((derived-mode-p 'spacelift-run-log-mode) #'spacelift-run-log-help)
     (t (user-error "Not in a Spacelift buffer")))))
 
 ;;; Stack list buffer
@@ -283,6 +307,7 @@ Width and alignment flags (e.g. %-12s) are supported."
     (define-key map (kbd "RET") #'spacelift-stack-list-visit)
     (define-key map (kbd "R") #'spacelift-stack-list-runs)
     (define-key map (kbd "w") #'spacelift-stack-list-browse)
+    (define-key map (kbd "l") #'spacelift-stack-list-latest-logs)
     (define-key map (kbd "r") #'spacelift-stack-list-refresh)
     (define-key map (kbd "g") #'spacelift-stack-list-refresh)
     (define-key map (kbd "q") #'quit-window)
@@ -355,6 +380,16 @@ Width and alignment flags (e.g. %-12s) are supported."
     (spacelift-with-auth
       (browse-url (spacelift-stack-url (spacelift-stack-id stack))))))
 
+(defun spacelift-stack-list-latest-logs (&optional tail)
+  "View the latest run logs of the stack on the current line.
+With a prefix argument TAIL, follow the run as it progresses."
+  (interactive "P")
+  (let ((stack (spacelift-stack-list-stack-at-point)))
+    (unless stack
+      (user-error "No stack on this line"))
+    (spacelift-with-auth
+      (spacelift-stack-show-latest-logs (spacelift-stack-id stack) tail))))
+
 ;;;###autoload
 (defun spacelift-stack-list-stacks (&optional search limit)
   "Display the list of Spacelift stacks in a dedicated buffer.
@@ -381,6 +416,7 @@ When `spacectl' is not authenticated, offer to log in instead."
   (let ((map (make-sparse-keymap)))
     (define-key map (kbd "R") #'spacelift-stack-runs)
     (define-key map (kbd "w") #'spacelift-stack-browse)
+    (define-key map (kbd "l") #'spacelift-stack-latest-logs)
     (define-key map (kbd "r") #'spacelift-stack-refresh)
     (define-key map (kbd "g") #'spacelift-stack-refresh)
     (define-key map (kbd "q") #'quit-window)
@@ -522,6 +558,16 @@ When `spacectl' is not authenticated, offer to log in instead."
   (spacelift-with-auth
     (browse-url (spacelift-stack-url (spacelift-stack-id spacelift--stack)))))
 
+(defun spacelift-stack-latest-logs (&optional tail)
+  "View the latest run logs of the stack in the current detail buffer.
+With a prefix argument TAIL, follow the run as it progresses."
+  (interactive "P")
+  (unless (and (derived-mode-p 'spacelift-stack-mode) spacelift--stack)
+    (user-error "Not in a Spacelift stack buffer"))
+  (spacelift-with-auth
+    (spacelift-stack-show-latest-logs (spacelift-stack-id spacelift--stack)
+                                      tail)))
+
 ;;;###autoload
 (defun spacelift-stack-show-buffer (id)
   "Display detailed information about the stack identified by ID.
@@ -543,6 +589,7 @@ When `spacectl' is not authenticated, offer to log in instead."
   (let ((map (make-sparse-keymap)))
     (define-key map (kbd "RET") #'spacelift-run-list-visit)
     (define-key map (kbd "w") #'spacelift-run-browse)
+    (define-key map (kbd "l") #'spacelift-run-logs)
     (define-key map (kbd "r") #'spacelift-run-list-refresh)
     (define-key map (kbd "g") #'spacelift-run-list-refresh)
     (define-key map (kbd "q") #'quit-window)
@@ -565,13 +612,13 @@ When `spacectl' is not authenticated, offer to log in instead."
   "Return the run list buffer name for STACK-ID."
   (format "*spacelift-runs: %s*" stack-id))
 
-(defun spacelift--insert-run-list (runs)
-  "Insert RUNS into the current buffer, one per line."
+(defun spacelift--insert-run-list (run-list)
+  "Insert each run of RUN-LIST into the current buffer, one per line."
   (let ((inhibit-read-only t))
     (erase-buffer)
-    (if (null runs)
+    (if (null run-list)
         (insert (propertize "No runs found.\n" 'face 'shadow))
-      (dolist (run runs)
+      (dolist (run run-list)
         (insert (propertize (spacelift--run-line run)
                             'spacelift-run run)
                 "\n")))
@@ -582,7 +629,7 @@ When `spacectl' is not authenticated, offer to log in instead."
   (get-text-property (line-beginning-position) 'spacelift-run))
 
 (defun spacelift-run-list-refresh ()
-  "Reload the runs shown in the current run list buffer."
+  "Reload the run list shown in the current buffer."
   (interactive)
   (unless (and (derived-mode-p 'spacelift-run-list-mode) spacelift--run-stack-id)
     (user-error "Not in a Spacelift run list buffer"))
@@ -604,7 +651,7 @@ When `spacectl' is not authenticated, offer to log in instead."
 
 ;;;###autoload
 (defun spacelift-run-list-buffer (stack-id &optional max-results)
-  "Display the runs of the stack identified by STACK-ID in a buffer.
+  "Display in a buffer the run list of the stack identified by STACK-ID.
 MAX-RESULTS caps the number of runs fetched, defaulting to
 `spacelift-run-list-max-results'.
 
@@ -627,6 +674,7 @@ When `spacectl' is not authenticated, offer to log in instead."
 (defvar spacelift-run-mode-map
   (let ((map (make-sparse-keymap)))
     (define-key map (kbd "w") #'spacelift-run-browse)
+    (define-key map (kbd "l") #'spacelift-run-logs)
     (define-key map (kbd "r") #'spacelift-run-refresh)
     (define-key map (kbd "g") #'spacelift-run-refresh)
     (define-key map (kbd "q") #'quit-window)
@@ -724,6 +772,179 @@ displayed in a run detail buffer."
         (browse-url url)
         (message "Browsing %s" url)))))
 
+;;; Run log buffer
+
+(defvar-local spacelift--log-stack-id nil
+  "Stack id whose run logs populate the current log buffer.")
+
+(defvar-local spacelift--log-run nil
+  "The `spacelift-run' whose logs populate the current log buffer.
+Nil when the buffer streams the stack's latest run via `--run-latest'.")
+
+(defvar-local spacelift--log-tail nil
+  "Whether the current log buffer is following (tailing) the run.")
+
+(defvar spacelift-run-log-mode-map
+  (let ((map (make-sparse-keymap)))
+    (define-key map (kbd "w") #'spacelift-run-log-browse)
+    (define-key map (kbd "r") #'spacelift-run-log-refresh)
+    (define-key map (kbd "g") #'spacelift-run-log-refresh)
+    (define-key map (kbd "G") #'spacelift-run-log-tail)
+    (define-key map (kbd "q") #'spacelift-run-log-quit)
+    (define-key map (kbd "?") #'spacelift-help)
+    map)
+  "Keymap for `spacelift-run-log-mode'.")
+
+(define-derived-mode spacelift-run-log-mode special-mode "Spacelift-Log"
+  "Major mode for showing the logs of a Spacelift run.
+
+\\{spacelift-run-log-mode-map}"
+  (setq-local truncate-lines nil))
+
+(defun spacelift--run-log-buffer-name (stack-id run)
+  "Return the log buffer name for RUN under STACK-ID.
+When RUN is nil, the buffer name refers to the stack's latest run."
+  (if run
+      (format "*spacelift-log: %s*" (spacelift-run-id run))
+    (format "*spacelift-log: %s (latest)*" stack-id)))
+
+(defun spacelift--run-log-filter (process string)
+  "Insert STRING from PROCESS into its buffer, applying ANSI colors."
+  (let ((buffer (process-buffer process)))
+    (when (buffer-live-p buffer)
+      (with-current-buffer buffer
+        (let ((inhibit-read-only t)
+              (at-end (= (point) (point-max)))
+              (windows (get-buffer-window-list buffer nil t)))
+          (save-excursion
+            (goto-char (point-max))
+            (let ((start (point)))
+              (insert string)
+              (ansi-color-apply-on-region start (point))))
+          ;; Follow output when point was already at the end.
+          (when at-end
+            (goto-char (point-max))
+            (dolist (window windows)
+              (set-window-point window (point-max)))))))))
+
+(defun spacelift--run-log-sentinel (process _event)
+  "Report completion of the log PROCESS in its buffer."
+  (let ((buffer (process-buffer process)))
+    (when (and (buffer-live-p buffer)
+               (memq (process-status process) '(exit signal)))
+      (with-current-buffer buffer
+        (let ((inhibit-read-only t))
+          (save-excursion
+            (goto-char (point-max))
+            (insert (propertize "\n-- end of logs --\n" 'face 'shadow))))))))
+
+(defun spacelift--run-log-start (stack-id run buffer tail)
+  "Start streaming logs into BUFFER, following when TAIL is non-nil.
+When RUN is non-nil, stream that run's logs; otherwise stream the latest
+run of STACK-ID."
+  (let ((existing (get-buffer-process buffer)))
+    (when (and existing (process-live-p existing))
+      (delete-process existing)))
+  (with-current-buffer buffer
+    (let ((inhibit-read-only t))
+      (erase-buffer)
+      (insert (propertize
+               (format "Logs for %s (stack %s)%s\n\n"
+                       (if run (spacelift-run-id run) "latest run")
+                       stack-id
+                       (if tail " [tailing]" ""))
+               'face 'shadow))))
+  (let ((process (if run
+                     (spacelift-run-logs-process run buffer tail)
+                   (spacelift-stack-latest-logs-process stack-id buffer tail))))
+    (set-process-filter process #'spacelift--run-log-filter)
+    (set-process-sentinel process #'spacelift--run-log-sentinel)
+    process))
+
+(defun spacelift-run-log-refresh ()
+  "Reload the logs shown in the current run log buffer."
+  (interactive)
+  (unless (and (derived-mode-p 'spacelift-run-log-mode) spacelift--log-stack-id)
+    (user-error "Not in a Spacelift run log buffer"))
+  (spacelift-with-auth
+    (spacelift--run-log-start spacelift--log-stack-id spacelift--log-run
+                              (current-buffer) spacelift--log-tail)
+    (message "Reloading logs for %s"
+             (if spacelift--log-run
+                 (spacelift-run-id spacelift--log-run)
+               (format "latest run of %s" spacelift--log-stack-id)))))
+
+(defun spacelift-run-log-tail ()
+  "Toggle following (tailing) the run in the current log buffer."
+  (interactive)
+  (unless (and (derived-mode-p 'spacelift-run-log-mode) spacelift--log-stack-id)
+    (user-error "Not in a Spacelift run log buffer"))
+  (setq spacelift--log-tail (not spacelift--log-tail))
+  (spacelift-with-auth
+    (spacelift--run-log-start spacelift--log-stack-id spacelift--log-run
+                              (current-buffer) spacelift--log-tail))
+  (message "Log tailing %s" (if spacelift--log-tail "enabled" "disabled")))
+
+(defun spacelift-run-log-browse ()
+  "Browse the Spacelift console URL for the current log buffer.
+Opens the run URL when known, or the stack URL for a latest-run buffer."
+  (interactive)
+  (unless (and (derived-mode-p 'spacelift-run-log-mode) spacelift--log-stack-id)
+    (user-error "Not in a Spacelift run log buffer"))
+  (spacelift-with-auth
+    (let ((url (if spacelift--log-run
+                   (spacelift-run-browse-url spacelift--log-run)
+                 (spacelift-stack-url spacelift--log-stack-id))))
+      (browse-url url)
+      (message "Browsing %s" url))))
+
+(defun spacelift-run-log-quit ()
+  "Stop any running log process and quit the log window."
+  (interactive)
+  (let ((process (get-buffer-process (current-buffer))))
+    (when (and process (process-live-p process))
+      (delete-process process)))
+  (quit-window))
+
+;;;###autoload
+(defun spacelift-run-show-logs (run &optional tail)
+  "Display the logs of RUN in a dedicated buffer.
+With TAIL non-nil, follow the run as it progresses."
+  (spacelift--show-logs-buffer (spacelift-run-stack-id run) run tail))
+
+;;;###autoload
+(defun spacelift-stack-show-latest-logs (stack-id &optional tail)
+  "Display the logs of the latest run of STACK-ID in a dedicated buffer.
+With TAIL non-nil, follow the run as it progresses."
+  (spacelift--show-logs-buffer stack-id nil tail))
+
+(defun spacelift--show-logs-buffer (stack-id run tail)
+  "Display a log buffer for STACK-ID and RUN, tailing when TAIL is non-nil.
+When RUN is nil, stream the stack's latest run."
+  (let ((buffer (get-buffer-create
+                 (spacelift--run-log-buffer-name stack-id run))))
+    (with-current-buffer buffer
+      (spacelift-run-log-mode)
+      (setq spacelift--log-stack-id stack-id
+            spacelift--log-run run
+            spacelift--log-tail tail)
+      (spacelift--run-log-start stack-id run buffer tail))
+    (pop-to-buffer buffer)))
+
+(defun spacelift-run-logs (&optional tail)
+  "View the logs of the run at point or in the current buffer.
+With a prefix argument TAIL, follow the run as it progresses.
+Works on the run under point in a run list buffer, the run shown in a
+run detail buffer, or the run of the current log buffer."
+  (interactive "P")
+  (let ((run (or (spacelift--run-at-point-or-current)
+                 (and (derived-mode-p 'spacelift-run-log-mode)
+                      spacelift--log-run))))
+    (unless run
+      (user-error "No run at point or in the current buffer"))
+    (spacelift-with-auth
+      (spacelift-run-show-logs run tail))))
+
 ;;; Evil integration for run buffers
 
 (defun spacelift--setup-run-evil-bindings ()
@@ -732,20 +953,30 @@ displayed in a run detail buffer."
     (evil-define-key* '(motion normal) spacelift-run-list-mode-map
       (kbd "RET") #'spacelift-run-list-visit
       "w" #'spacelift-run-browse
+      "l" #'spacelift-run-logs
       "r" #'spacelift-run-list-refresh
       "q" #'quit-window
       "?" #'spacelift-help)
     (evil-define-key* '(motion normal) spacelift-run-mode-map
       "w" #'spacelift-run-browse
+      "l" #'spacelift-run-logs
       "r" #'spacelift-run-refresh
       "q" #'quit-window
       "?" #'spacelift-help)
+    (evil-define-key* '(motion normal) spacelift-run-log-mode-map
+      "w" #'spacelift-run-log-browse
+      "r" #'spacelift-run-log-refresh
+      "G" #'spacelift-run-log-tail
+      "q" #'spacelift-run-log-quit
+      "?" #'spacelift-help)
     (evil-define-key* '(motion normal) spacelift-stack-list-mode-map
       "R" #'spacelift-stack-list-runs
-      "w" #'spacelift-stack-list-browse)
+      "w" #'spacelift-stack-list-browse
+      "l" #'spacelift-stack-list-latest-logs)
     (evil-define-key* '(motion normal) spacelift-stack-mode-map
       "R" #'spacelift-stack-runs
-      "w" #'spacelift-stack-browse)))
+      "w" #'spacelift-stack-browse
+      "l" #'spacelift-stack-latest-logs)))
 
 (with-eval-after-load 'evil
   (spacelift--setup-run-evil-bindings))

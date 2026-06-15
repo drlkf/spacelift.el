@@ -89,6 +89,37 @@ PREVIEW is non-nil, preview (proposed) runs are returned."
     (mapcar (lambda (object) (spacelift-run--parse object stack-id))
             (apply #'spacelift--run-json args))))
 
+(defun spacelift--run-logs-process (stack-id run-id buffer tail phase)
+  "Stream logs into BUFFER for STACK-ID, returning the process.
+When RUN-ID is non-nil, stream that run's logs; otherwise stream the
+latest run of the stack (`--run-latest').  When TAIL is non-nil, keep
+following the run.  PHASE, when non-nil, restricts the logs to a single
+run phase (for example \"PLANNING\" or \"APPLYING\")."
+  (let ((args (append (list "stack" "logs" "--id" stack-id)
+                      (if run-id
+                          (list "--run" run-id)
+                        (list "--run-latest")))))
+    (when tail
+      (setq args (append args (list "--tail"))))
+    (when phase
+      (setq args (append args (list "--phase" phase))))
+    (apply #'spacelift--run-async buffer "spacelift-logs" args)))
+
+(defun spacelift-run-logs-process (run buffer &optional tail phase)
+  "Stream the logs of RUN into BUFFER, returning the process.
+When TAIL is non-nil, keep following the run as it progresses.  PHASE,
+when non-nil, restricts the logs to a single run phase (for example
+\"PLANNING\" or \"APPLYING\")."
+  (spacelift--run-logs-process (spacelift-run-stack-id run)
+                               (spacelift-run-id run)
+                               buffer tail phase))
+
+(defun spacelift-stack-latest-logs-process (stack-id buffer &optional tail phase)
+  "Stream the latest run logs of STACK-ID into BUFFER, returning the process.
+When TAIL is non-nil, keep following the run.  PHASE, when non-nil,
+restricts the logs to a single run phase."
+  (spacelift--run-logs-process stack-id nil buffer tail phase))
+
 (provide 'spacelift-run)
 
 ;;; spacelift-run.el ends here
