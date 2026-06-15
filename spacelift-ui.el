@@ -5,7 +5,7 @@
 ;; Author: drlkf <drlkf@drlkf.net>
 ;; Assisted-by: Claude:claude-opus-4-8
 ;; Keywords: tools, processes
-;; Package-Requires: ((emacs "27.1"))
+;; Package-Requires: ((emacs "27.1") (transient "0.3.0"))
 ;; URL: https://github.com/drlkf/spacelift.el
 
 ;; This file is not part of GNU Emacs.
@@ -45,12 +45,14 @@
 ;;   run information.
 ;;
 ;; In every buffer, `r' reloads the contents and `q' quits the window.
-;; `w' browses the Spacelift console URL of the stack or run at point.
+;; `w' browses the Spacelift console URL of the stack or run at point, and
+;; `?' shows a magit-style transient popup of the available keys.
 
 ;;; Code:
 
 (require 'cl-lib)
 (require 'browse-url)
+(require 'transient)
 (require 'spacelift-core)
 (require 'spacelift-stack)
 (require 'spacelift-run)
@@ -210,6 +212,70 @@ Width and alignment flags (e.g. %-12s) are supported."
        (?T . ,(or (spacelift-run-triggered-by run) ""))
        (?D . ,(or (spacelift-run-delta run) ""))))))
 
+;;; Help
+
+;; A magit-style transient popup lists the available keys for the current
+;; buffer, grouped by purpose.  Each mode has its own prefix, and
+;; `spacelift-help' dispatches to the right one.
+
+(transient-define-prefix spacelift-stack-list-help ()
+  "Show the available keys in a Spacelift stack list buffer."
+  ["Spacelift stacks"
+   ["Navigate"
+    ("RET" "Visit stack" spacelift-stack-list-visit)
+    ("R" "List runs" spacelift-stack-list-runs)
+    ("j" "Next line" next-line :transient t)
+    ("k" "Previous line" previous-line :transient t)]
+   ["Act"
+    ("w" "Browse in console" spacelift-stack-list-browse)
+    ("r" "Reload" spacelift-stack-list-refresh)]
+   ["Window"
+    ("q" "Quit window" quit-window)]])
+
+(transient-define-prefix spacelift-stack-help ()
+  "Show the available keys in a Spacelift stack detail buffer."
+  ["Spacelift stack"
+   ["Navigate"
+    ("R" "List runs" spacelift-stack-runs)]
+   ["Act"
+    ("w" "Browse in console" spacelift-stack-browse)
+    ("r" "Reload" spacelift-stack-refresh)]
+   ["Window"
+    ("q" "Quit window" quit-window)]])
+
+(transient-define-prefix spacelift-run-list-help ()
+  "Show the available keys in a Spacelift run list buffer."
+  ["Spacelift runs"
+   ["Navigate"
+    ("RET" "Visit run" spacelift-run-list-visit)
+    ("j" "Next line" next-line :transient t)
+    ("k" "Previous line" previous-line :transient t)]
+   ["Act"
+    ("w" "Browse run URL" spacelift-run-browse)
+    ("r" "Reload" spacelift-run-list-refresh)]
+   ["Window"
+    ("q" "Quit window" quit-window)]])
+
+(transient-define-prefix spacelift-run-help ()
+  "Show the available keys in a Spacelift run detail buffer."
+  ["Spacelift run"
+   ["Act"
+    ("w" "Browse run URL" spacelift-run-browse)
+    ("r" "Reload" spacelift-run-refresh)]
+   ["Window"
+    ("q" "Quit window" quit-window)]])
+
+(defun spacelift-help ()
+  "Show a magit-style popup of the available keys for the current buffer."
+  (interactive)
+  (call-interactively
+   (cond
+    ((derived-mode-p 'spacelift-stack-list-mode) #'spacelift-stack-list-help)
+    ((derived-mode-p 'spacelift-stack-mode) #'spacelift-stack-help)
+    ((derived-mode-p 'spacelift-run-list-mode) #'spacelift-run-list-help)
+    ((derived-mode-p 'spacelift-run-mode) #'spacelift-run-help)
+    (t (user-error "Not in a Spacelift buffer")))))
+
 ;;; Stack list buffer
 
 (defvar spacelift-stack-list-mode-map
@@ -220,6 +286,7 @@ Width and alignment flags (e.g. %-12s) are supported."
     (define-key map (kbd "r") #'spacelift-stack-list-refresh)
     (define-key map (kbd "g") #'spacelift-stack-list-refresh)
     (define-key map (kbd "q") #'quit-window)
+    (define-key map (kbd "?") #'spacelift-help)
     (define-key map (kbd "n") #'next-line)
     (define-key map (kbd "p") #'previous-line)
     (define-key map (kbd "j") #'next-line)
@@ -317,6 +384,7 @@ When `spacectl' is not authenticated, offer to log in instead."
     (define-key map (kbd "r") #'spacelift-stack-refresh)
     (define-key map (kbd "g") #'spacelift-stack-refresh)
     (define-key map (kbd "q") #'quit-window)
+    (define-key map (kbd "?") #'spacelift-help)
     map)
   "Keymap for `spacelift-stack-mode'.")
 
@@ -343,10 +411,12 @@ When `spacectl' is not authenticated, offer to log in instead."
     (evil-define-key* '(motion normal) spacelift-stack-list-mode-map
       (kbd "RET") #'spacelift-stack-list-visit
       "r" #'spacelift-stack-list-refresh
-      "q" #'quit-window)
+      "q" #'quit-window
+      "?" #'spacelift-help)
     (evil-define-key* '(motion normal) spacelift-stack-mode-map
       "r" #'spacelift-stack-refresh
-      "q" #'quit-window)))
+      "q" #'quit-window
+      "?" #'spacelift-help)))
 
 (with-eval-after-load 'evil
   (spacelift--setup-evil-bindings))
@@ -476,6 +546,7 @@ When `spacectl' is not authenticated, offer to log in instead."
     (define-key map (kbd "r") #'spacelift-run-list-refresh)
     (define-key map (kbd "g") #'spacelift-run-list-refresh)
     (define-key map (kbd "q") #'quit-window)
+    (define-key map (kbd "?") #'spacelift-help)
     (define-key map (kbd "n") #'next-line)
     (define-key map (kbd "p") #'previous-line)
     (define-key map (kbd "j") #'next-line)
@@ -559,6 +630,7 @@ When `spacectl' is not authenticated, offer to log in instead."
     (define-key map (kbd "r") #'spacelift-run-refresh)
     (define-key map (kbd "g") #'spacelift-run-refresh)
     (define-key map (kbd "q") #'quit-window)
+    (define-key map (kbd "?") #'spacelift-help)
     map)
   "Keymap for `spacelift-run-mode'.")
 
@@ -661,11 +733,13 @@ displayed in a run detail buffer."
       (kbd "RET") #'spacelift-run-list-visit
       "w" #'spacelift-run-browse
       "r" #'spacelift-run-list-refresh
-      "q" #'quit-window)
+      "q" #'quit-window
+      "?" #'spacelift-help)
     (evil-define-key* '(motion normal) spacelift-run-mode-map
       "w" #'spacelift-run-browse
       "r" #'spacelift-run-refresh
-      "q" #'quit-window)
+      "q" #'quit-window
+      "?" #'spacelift-help)
     (evil-define-key* '(motion normal) spacelift-stack-list-mode-map
       "R" #'spacelift-stack-list-runs
       "w" #'spacelift-stack-list-browse)

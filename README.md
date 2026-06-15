@@ -35,6 +35,7 @@ Stack list and stack detail buffers:
 |-------|----------------------|
 | `r`   | Reload the buffer    |
 | `q`   | Quit the window      |
+| `?`   | Show a magit-style popup of the available keys |
 | `RET` | Visit the stack (list buffer only) |
 | `R`   | Open the stack's run list |
 | `w`   | Browse the stack in the Spacelift console |
@@ -46,6 +47,7 @@ Run list and run detail buffers:
 |-------|----------------------|
 | `r`   | Reload the buffer    |
 | `q`   | Quit the window      |
+| `?`   | Show a magit-style popup of the available keys |
 | `RET` | Visit the run (list buffer only) |
 | `w`   | Browse the run URL in the Spacelift console |
 | `j`/`k`, `n`/`p` | Move down/up (list buffer) |
