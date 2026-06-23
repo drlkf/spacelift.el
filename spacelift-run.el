@@ -100,6 +100,14 @@ RUN-METADATA, when non-nil, is passed as `--run-metadata'.  Return
       (setq args (append args (list "--run-metadata" run-metadata))))
     (apply #'spacelift--run args)))
 
+(defun spacelift-run-retry (run)
+  "Retry the failed RUN via `spacectl stack retry'.
+Return `spacectl''s raw output.  This is a write operation."
+  (apply #'spacelift--run
+         (list "stack" "retry"
+               "--id" (spacelift-run-stack-id run)
+               "--run" (spacelift-run-id run))))
+
 (defun spacelift--run-logs-process (stack-id run-id buffer tail phase)
   "Stream logs into BUFFER for STACK-ID, returning the process.
 When RUN-ID is non-nil, stream that run's logs; otherwise stream the

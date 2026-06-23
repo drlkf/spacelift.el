@@ -240,6 +240,7 @@ Width and alignment flags (e.g. %-12s) are supported."
     ("w" "Browse in console" spacelift-stack-list-browse)
     ("l" "View latest logs" spacelift-stack-list-latest-logs)
     ("c" "Confirm latest run" spacelift-stack-list-confirm)
+    ("t" "Retry latest run" spacelift-stack-list-retry)
     ("r" "Reload" spacelift-stack-list-refresh)]
    ["Window"
     ("q" "Quit window" quit-window)
@@ -254,6 +255,7 @@ Width and alignment flags (e.g. %-12s) are supported."
     ("w" "Browse in console" spacelift-stack-browse)
     ("l" "View latest logs" spacelift-stack-latest-logs)
     ("c" "Confirm latest run" spacelift-stack-confirm)
+    ("t" "Retry latest run" spacelift-stack-retry)
     ("r" "Reload" spacelift-stack-refresh)]
    ["Window"
     ("q" "Quit window" quit-window)
@@ -270,6 +272,7 @@ Width and alignment flags (e.g. %-12s) are supported."
     ("w" "Browse run URL" spacelift-run-browse)
     ("l" "View logs" spacelift-run-logs)
     ("c" "Confirm run" spacelift-run-confirm-at-point)
+    ("t" "Retry run" spacelift-run-retry-at-point)
     ("r" "Reload" spacelift-run-list-refresh)]
    ["Window"
     ("q" "Quit window" quit-window)
@@ -282,6 +285,7 @@ Width and alignment flags (e.g. %-12s) are supported."
     ("w" "Browse run URL" spacelift-run-browse)
     ("l" "View logs" spacelift-run-logs)
     ("c" "Confirm run" spacelift-run-confirm-at-point)
+    ("t" "Retry run" spacelift-run-retry-at-point)
     ("r" "Reload" spacelift-run-refresh)]
    ["Window"
     ("q" "Quit window" quit-window)
@@ -319,6 +323,7 @@ Width and alignment flags (e.g. %-12s) are supported."
     (define-key map (kbd "w") #'spacelift-stack-list-browse)
     (define-key map (kbd "l") #'spacelift-stack-list-latest-logs)
     (define-key map (kbd "c") #'spacelift-stack-list-confirm)
+    (define-key map (kbd "t") #'spacelift-stack-list-retry)
     (define-key map (kbd "r") #'spacelift-stack-list-refresh)
     (define-key map (kbd "g") #'spacelift-stack-list-refresh)
     (define-key map (kbd "q") #'quit-window)
@@ -430,6 +435,30 @@ confirmation first.  Return non-nil when a run was confirmed."
     (when (spacelift--confirm-stack-latest-run (spacelift-stack-id stack))
       (spacelift-stack-list-refresh))))
 
+(defun spacelift--retry-stack-latest-run (stack-id)
+  "Retry the latest run of STACK-ID.
+The latest run is the displayed run of the stack.  Retrying is a write
+operation, so it asks for confirmation first.  Return non-nil when a run
+was retried."
+  (spacelift-with-auth
+    (let ((run (car (spacelift-stack-run-list stack-id 1))))
+      (unless run
+        (user-error "Stack %s has no runs" stack-id))
+      (let ((id (spacelift-run-id run)))
+        (when (yes-or-no-p (format "Retry run %s of stack %s? " id stack-id))
+          (spacelift-run-retry run)
+          (message "Retried run %s" id)
+          t)))))
+
+(defun spacelift-stack-list-retry ()
+  "Retry the latest run of the stack on the current line."
+  (interactive)
+  (let ((stack (spacelift-stack-list-stack-at-point)))
+    (unless stack
+      (user-error "No stack on this line"))
+    (when (spacelift--retry-stack-latest-run (spacelift-stack-id stack))
+      (spacelift-stack-list-refresh))))
+
 ;;;###autoload
 (defun spacelift-stack-list-stacks (&optional search limit)
   "Display the list of Spacelift stacks in a dedicated buffer.
@@ -458,6 +487,7 @@ When `spacectl' is not authenticated, offer to log in instead."
     (define-key map (kbd "w") #'spacelift-stack-browse)
     (define-key map (kbd "l") #'spacelift-stack-latest-logs)
     (define-key map (kbd "c") #'spacelift-stack-confirm)
+    (define-key map (kbd "t") #'spacelift-stack-retry)
     (define-key map (kbd "r") #'spacelift-stack-refresh)
     (define-key map (kbd "g") #'spacelift-stack-refresh)
     (define-key map (kbd "q") #'quit-window)
@@ -618,6 +648,15 @@ With a prefix argument TAIL, follow the run as it progresses."
          (spacelift-stack-id spacelift--stack))
     (spacelift-stack-refresh)))
 
+(defun spacelift-stack-retry ()
+  "Retry the latest run of the stack in the current detail buffer."
+  (interactive)
+  (unless (and (derived-mode-p 'spacelift-stack-mode) spacelift--stack)
+    (user-error "Not in a Spacelift stack buffer"))
+  (when (spacelift--retry-stack-latest-run
+         (spacelift-stack-id spacelift--stack))
+    (spacelift-stack-refresh)))
+
 ;;;###autoload
 (defun spacelift-stack-show-buffer (id)
   "Display detailed information about the stack identified by ID.
@@ -641,6 +680,7 @@ When `spacectl' is not authenticated, offer to log in instead."
     (define-key map (kbd "w") #'spacelift-run-browse)
     (define-key map (kbd "l") #'spacelift-run-logs)
     (define-key map (kbd "c") #'spacelift-run-confirm-at-point)
+    (define-key map (kbd "t") #'spacelift-run-retry-at-point)
     (define-key map (kbd "r") #'spacelift-run-list-refresh)
     (define-key map (kbd "g") #'spacelift-run-list-refresh)
     (define-key map (kbd "q") #'quit-window)
@@ -727,6 +767,7 @@ When `spacectl' is not authenticated, offer to log in instead."
     (define-key map (kbd "w") #'spacelift-run-browse)
     (define-key map (kbd "l") #'spacelift-run-logs)
     (define-key map (kbd "c") #'spacelift-run-confirm-at-point)
+    (define-key map (kbd "t") #'spacelift-run-retry-at-point)
     (define-key map (kbd "r") #'spacelift-run-refresh)
     (define-key map (kbd "g") #'spacelift-run-refresh)
     (define-key map (kbd "q") #'quit-window)
@@ -843,6 +884,26 @@ confirmation first."
         (spacelift-with-auth
           (spacelift-run-confirm run)
           (message "Confirmed run %s" id)
+          (cond
+           ((derived-mode-p 'spacelift-run-list-mode)
+            (spacelift-run-list-refresh))
+           ((derived-mode-p 'spacelift-run-mode)
+            (spacelift-run-refresh))))))))
+
+(defun spacelift-run-retry-at-point ()
+  "Retry the run at point or in the current buffer.
+Works on the run under point in a run list buffer and on the run shown
+in a run detail buffer.  Retrying is a write operation, so it asks for
+confirmation first."
+  (interactive)
+  (let ((run (spacelift--run-at-point-or-current)))
+    (unless run
+      (user-error "No run at point or in the current buffer"))
+    (let ((id (spacelift-run-id run)))
+      (when (yes-or-no-p (format "Retry run %s? " id))
+        (spacelift-with-auth
+          (spacelift-run-retry run)
+          (message "Retried run %s" id)
           (cond
            ((derived-mode-p 'spacelift-run-list-mode)
             (spacelift-run-list-refresh))
@@ -1032,6 +1093,7 @@ run detail buffer, or the run of the current log buffer."
       "w" #'spacelift-run-browse
       "l" #'spacelift-run-logs
       "c" #'spacelift-run-confirm-at-point
+      "t" #'spacelift-run-retry-at-point
       "r" #'spacelift-run-list-refresh
       "q" #'quit-window
       "?" #'spacelift-help)
@@ -1039,6 +1101,7 @@ run detail buffer, or the run of the current log buffer."
       "w" #'spacelift-run-browse
       "l" #'spacelift-run-logs
       "c" #'spacelift-run-confirm-at-point
+      "t" #'spacelift-run-retry-at-point
       "r" #'spacelift-run-refresh
       "q" #'quit-window
       "?" #'spacelift-help)
@@ -1052,12 +1115,14 @@ run detail buffer, or the run of the current log buffer."
       "R" #'spacelift-stack-list-runs
       "w" #'spacelift-stack-list-browse
       "l" #'spacelift-stack-list-latest-logs
-      "c" #'spacelift-stack-list-confirm)
+      "c" #'spacelift-stack-list-confirm
+      "t" #'spacelift-stack-list-retry)
     (evil-define-key* '(motion normal) spacelift-stack-mode-map
       "R" #'spacelift-stack-runs
       "w" #'spacelift-stack-browse
       "l" #'spacelift-stack-latest-logs
-      "c" #'spacelift-stack-confirm)))
+      "c" #'spacelift-stack-confirm
+      "t" #'spacelift-stack-retry)))
 
 (with-eval-after-load 'evil
   (spacelift--setup-run-evil-bindings))
