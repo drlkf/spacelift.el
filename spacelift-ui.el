@@ -123,7 +123,7 @@ Width and alignment flags (e.g. %-30n) are supported."
   :type 'string
   :group 'spacelift)
 
-(defcustom spacelift-run-line-format "%-12c  %-12s  %-19d  %t"
+(defcustom spacelift-run-line-format "%-12c  %-17s  %-19d  %t"
   "Format string for a run line in the run list buffer.
 The following `format-spec' style specifiers are available:
 
@@ -239,6 +239,7 @@ Width and alignment flags (e.g. %-12s) are supported."
    ["Act"
     ("w" "Browse in console" spacelift-stack-list-browse)
     ("l" "View latest logs" spacelift-stack-list-latest-logs)
+    ("c" "Confirm latest run" spacelift-stack-list-confirm)
     ("r" "Reload" spacelift-stack-list-refresh)]
    ["Window"
     ("q" "Quit window" quit-window)
@@ -252,6 +253,7 @@ Width and alignment flags (e.g. %-12s) are supported."
    ["Act"
     ("w" "Browse in console" spacelift-stack-browse)
     ("l" "View latest logs" spacelift-stack-latest-logs)
+    ("c" "Confirm latest run" spacelift-stack-confirm)
     ("r" "Reload" spacelift-stack-refresh)]
    ["Window"
     ("q" "Quit window" quit-window)
@@ -267,6 +269,7 @@ Width and alignment flags (e.g. %-12s) are supported."
    ["Act"
     ("w" "Browse run URL" spacelift-run-browse)
     ("l" "View logs" spacelift-run-logs)
+    ("c" "Confirm run" spacelift-run-confirm-at-point)
     ("r" "Reload" spacelift-run-list-refresh)]
    ["Window"
     ("q" "Quit window" quit-window)
@@ -278,6 +281,7 @@ Width and alignment flags (e.g. %-12s) are supported."
    ["Act"
     ("w" "Browse run URL" spacelift-run-browse)
     ("l" "View logs" spacelift-run-logs)
+    ("c" "Confirm run" spacelift-run-confirm-at-point)
     ("r" "Reload" spacelift-run-refresh)]
    ["Window"
     ("q" "Quit window" quit-window)
@@ -314,6 +318,7 @@ Width and alignment flags (e.g. %-12s) are supported."
     (define-key map (kbd "R") #'spacelift-stack-list-runs)
     (define-key map (kbd "w") #'spacelift-stack-list-browse)
     (define-key map (kbd "l") #'spacelift-stack-list-latest-logs)
+    (define-key map (kbd "c") #'spacelift-stack-list-confirm)
     (define-key map (kbd "r") #'spacelift-stack-list-refresh)
     (define-key map (kbd "g") #'spacelift-stack-list-refresh)
     (define-key map (kbd "q") #'quit-window)
@@ -396,6 +401,35 @@ With a prefix argument TAIL, follow the run as it progresses."
     (spacelift-with-auth
       (spacelift-stack-show-latest-logs (spacelift-stack-id stack) tail))))
 
+(defun spacelift--confirm-stack-latest-run (stack-id)
+  "Confirm the latest run of STACK-ID when it is awaiting confirmation.
+The latest run is the displayed run of the stack; it must be in the
+UNCONFIRMED state.  Confirming is a write operation, so it asks for
+confirmation first.  Return non-nil when a run was confirmed."
+  (spacelift-with-auth
+    (let ((run (car (spacelift-stack-run-list stack-id 1))))
+      (unless run
+        (user-error "Stack %s has no runs" stack-id))
+      (let ((state (spacelift-run-state run))
+            (id (spacelift-run-id run)))
+        (unless (equal state "UNCONFIRMED")
+          (user-error
+           "Latest run %s of stack %s is not awaiting confirmation (state: %s)"
+           id stack-id (or state "unknown")))
+        (when (yes-or-no-p (format "Confirm run %s of stack %s? " id stack-id))
+          (spacelift-run-confirm run)
+          (message "Confirmed run %s" id)
+          t)))))
+
+(defun spacelift-stack-list-confirm ()
+  "Confirm the latest run of the stack on the current line."
+  (interactive)
+  (let ((stack (spacelift-stack-list-stack-at-point)))
+    (unless stack
+      (user-error "No stack on this line"))
+    (when (spacelift--confirm-stack-latest-run (spacelift-stack-id stack))
+      (spacelift-stack-list-refresh))))
+
 ;;;###autoload
 (defun spacelift-stack-list-stacks (&optional search limit)
   "Display the list of Spacelift stacks in a dedicated buffer.
@@ -423,6 +457,7 @@ When `spacectl' is not authenticated, offer to log in instead."
     (define-key map (kbd "R") #'spacelift-stack-runs)
     (define-key map (kbd "w") #'spacelift-stack-browse)
     (define-key map (kbd "l") #'spacelift-stack-latest-logs)
+    (define-key map (kbd "c") #'spacelift-stack-confirm)
     (define-key map (kbd "r") #'spacelift-stack-refresh)
     (define-key map (kbd "g") #'spacelift-stack-refresh)
     (define-key map (kbd "q") #'quit-window)
@@ -574,6 +609,15 @@ With a prefix argument TAIL, follow the run as it progresses."
     (spacelift-stack-show-latest-logs (spacelift-stack-id spacelift--stack)
                                       tail)))
 
+(defun spacelift-stack-confirm ()
+  "Confirm the latest run of the stack in the current detail buffer."
+  (interactive)
+  (unless (and (derived-mode-p 'spacelift-stack-mode) spacelift--stack)
+    (user-error "Not in a Spacelift stack buffer"))
+  (when (spacelift--confirm-stack-latest-run
+         (spacelift-stack-id spacelift--stack))
+    (spacelift-stack-refresh)))
+
 ;;;###autoload
 (defun spacelift-stack-show-buffer (id)
   "Display detailed information about the stack identified by ID.
@@ -596,6 +640,7 @@ When `spacectl' is not authenticated, offer to log in instead."
     (define-key map (kbd "RET") #'spacelift-run-list-visit)
     (define-key map (kbd "w") #'spacelift-run-browse)
     (define-key map (kbd "l") #'spacelift-run-logs)
+    (define-key map (kbd "c") #'spacelift-run-confirm-at-point)
     (define-key map (kbd "r") #'spacelift-run-list-refresh)
     (define-key map (kbd "g") #'spacelift-run-list-refresh)
     (define-key map (kbd "q") #'quit-window)
@@ -681,6 +726,7 @@ When `spacectl' is not authenticated, offer to log in instead."
   (let ((map (make-sparse-keymap)))
     (define-key map (kbd "w") #'spacelift-run-browse)
     (define-key map (kbd "l") #'spacelift-run-logs)
+    (define-key map (kbd "c") #'spacelift-run-confirm-at-point)
     (define-key map (kbd "r") #'spacelift-run-refresh)
     (define-key map (kbd "g") #'spacelift-run-refresh)
     (define-key map (kbd "q") #'quit-window)
@@ -777,6 +823,31 @@ displayed in a run detail buffer."
       (let ((url (spacelift-run-browse-url run)))
         (browse-url url)
         (message "Browsing %s" url)))))
+
+(defun spacelift-run-confirm-at-point ()
+  "Confirm the unconfirmed run at point or in the current buffer.
+Works on the run under point in a run list buffer and on the run shown
+in a run detail buffer.  Only runs in the UNCONFIRMED state can be
+confirmed.  Confirming is a write operation, so it asks for
+confirmation first."
+  (interactive)
+  (let ((run (spacelift--run-at-point-or-current)))
+    (unless run
+      (user-error "No run at point or in the current buffer"))
+    (let ((state (spacelift-run-state run))
+          (id (spacelift-run-id run)))
+      (unless (equal state "UNCONFIRMED")
+        (user-error "Run %s is not awaiting confirmation (state: %s)"
+                    id (or state "unknown")))
+      (when (yes-or-no-p (format "Confirm run %s? " id))
+        (spacelift-with-auth
+          (spacelift-run-confirm run)
+          (message "Confirmed run %s" id)
+          (cond
+           ((derived-mode-p 'spacelift-run-list-mode)
+            (spacelift-run-list-refresh))
+           ((derived-mode-p 'spacelift-run-mode)
+            (spacelift-run-refresh))))))))
 
 ;;; Run log buffer
 
@@ -960,12 +1031,14 @@ run detail buffer, or the run of the current log buffer."
       (kbd "RET") #'spacelift-run-list-visit
       "w" #'spacelift-run-browse
       "l" #'spacelift-run-logs
+      "c" #'spacelift-run-confirm-at-point
       "r" #'spacelift-run-list-refresh
       "q" #'quit-window
       "?" #'spacelift-help)
     (evil-define-key* '(motion normal) spacelift-run-mode-map
       "w" #'spacelift-run-browse
       "l" #'spacelift-run-logs
+      "c" #'spacelift-run-confirm-at-point
       "r" #'spacelift-run-refresh
       "q" #'quit-window
       "?" #'spacelift-help)
@@ -978,11 +1051,13 @@ run detail buffer, or the run of the current log buffer."
     (evil-define-key* '(motion normal) spacelift-stack-list-mode-map
       "R" #'spacelift-stack-list-runs
       "w" #'spacelift-stack-list-browse
-      "l" #'spacelift-stack-list-latest-logs)
+      "l" #'spacelift-stack-list-latest-logs
+      "c" #'spacelift-stack-list-confirm)
     (evil-define-key* '(motion normal) spacelift-stack-mode-map
       "R" #'spacelift-stack-runs
       "w" #'spacelift-stack-browse
-      "l" #'spacelift-stack-latest-logs)))
+      "l" #'spacelift-stack-latest-logs
+      "c" #'spacelift-stack-confirm)))
 
 (with-eval-after-load 'evil
   (spacelift--setup-run-evil-bindings))

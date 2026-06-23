@@ -89,6 +89,17 @@ PREVIEW is non-nil, preview (proposed) runs are returned."
     (mapcar (lambda (object) (spacelift-run--parse object stack-id))
             (apply #'spacelift--run-json args))))
 
+(defun spacelift-run-confirm (run &optional run-metadata)
+  "Confirm the unconfirmed tracked RUN via `spacectl stack confirm'.
+RUN-METADATA, when non-nil, is passed as `--run-metadata'.  Return
+`spacectl''s raw output.  This is a write operation."
+  (let ((args (list "stack" "confirm"
+                    "--id" (spacelift-run-stack-id run)
+                    "--run" (spacelift-run-id run))))
+    (when run-metadata
+      (setq args (append args (list "--run-metadata" run-metadata))))
+    (apply #'spacelift--run args)))
+
 (defun spacelift--run-logs-process (stack-id run-id buffer tail phase)
   "Stream logs into BUFFER for STACK-ID, returning the process.
 When RUN-ID is non-nil, stream that run's logs; otherwise stream the

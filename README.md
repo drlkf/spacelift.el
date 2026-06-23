@@ -40,6 +40,7 @@ Stack list and stack detail buffers:
 | `R`   | Open the stack's run list |
 | `w`   | Browse the stack in the Spacelift console |
 | `l`   | View the stack's latest run logs (`C-u l` to follow/tail) |
+| `c`   | Confirm the stack's latest run if unconfirmed (asks first) |
 | `j`/`k`, `n`/`p` | Move down/up (list buffer) |
 
 Run list and run detail buffers:
@@ -52,6 +53,7 @@ Run list and run detail buffers:
 | `RET` | Visit the run (list buffer only) |
 | `w`   | Browse the run URL in the Spacelift console |
 | `l`   | View the run's logs (`C-u l` to follow/tail) |
+| `c`   | Confirm an unconfirmed run (asks first) |
 | `j`/`k`, `n`/`p` | Move down/up (list buffer) |
 
 Run log buffers:
