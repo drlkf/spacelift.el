@@ -48,8 +48,9 @@
 ;;   a run with ANSI colors, optionally tailing it.
 ;;
 ;; In every buffer, `r' reloads the contents and `q' quits the window.
-;; `w' browses the Spacelift console URL of the stack or run at point, and
-;; `?' shows a magit-style transient popup of the available keys.
+;; `w' browses the Spacelift console URL of the stack or run at point, `y'
+;; copies that URL to the kill ring, and `?' shows a magit-style transient
+;; popup of the available keys.
 
 ;;; Code:
 
@@ -222,6 +223,13 @@ Width and alignment flags (e.g. %-12s) are supported."
        (?T . ,(or (spacelift-run-triggered-by run) ""))
        (?D . ,(or (spacelift-run-delta run) ""))))))
 
+;;; URL helpers
+
+(defun spacelift--copy-url (url)
+  "Copy URL to the kill ring and report it."
+  (kill-new url)
+  (message "Copied %s" url))
+
 ;;; Help
 
 ;; A magit-style transient popup lists the available keys for the current
@@ -238,6 +246,7 @@ Width and alignment flags (e.g. %-12s) are supported."
     ("k" "Previous line" previous-line :transient t)]
    ["Act"
     ("w" "Browse in console" spacelift-stack-list-browse)
+    ("y" "Copy URL" spacelift-stack-list-copy-url)
     ("l" "View latest logs" spacelift-stack-list-latest-logs)
     ("c" "Confirm latest run" spacelift-stack-list-confirm)
     ("t" "Retry latest run" spacelift-stack-list-retry)
@@ -253,6 +262,7 @@ Width and alignment flags (e.g. %-12s) are supported."
     ("R" "List runs" spacelift-stack-runs)]
    ["Act"
     ("w" "Browse in console" spacelift-stack-browse)
+    ("y" "Copy URL" spacelift-stack-copy-url)
     ("l" "View latest logs" spacelift-stack-latest-logs)
     ("c" "Confirm latest run" spacelift-stack-confirm)
     ("t" "Retry latest run" spacelift-stack-retry)
@@ -270,6 +280,7 @@ Width and alignment flags (e.g. %-12s) are supported."
     ("k" "Previous line" previous-line :transient t)]
    ["Act"
     ("w" "Browse run URL" spacelift-run-browse)
+    ("y" "Copy URL" spacelift-run-copy-url)
     ("l" "View logs" spacelift-run-logs)
     ("c" "Confirm run" spacelift-run-confirm-at-point)
     ("t" "Retry run" spacelift-run-retry-at-point)
@@ -283,6 +294,7 @@ Width and alignment flags (e.g. %-12s) are supported."
   ["Spacelift run"
    ["Act"
     ("w" "Browse run URL" spacelift-run-browse)
+    ("y" "Copy URL" spacelift-run-copy-url)
     ("l" "View logs" spacelift-run-logs)
     ("c" "Confirm run" spacelift-run-confirm-at-point)
     ("t" "Retry run" spacelift-run-retry-at-point)
@@ -296,6 +308,7 @@ Width and alignment flags (e.g. %-12s) are supported."
   ["Spacelift run logs"
    ["Act"
     ("w" "Browse in console" spacelift-run-log-browse)
+    ("y" "Copy URL" spacelift-run-log-copy-url)
     ("r" "Reload logs" spacelift-run-log-refresh)
     ("G" "Toggle tailing" spacelift-run-log-tail)]
    ["Window"
@@ -321,6 +334,7 @@ Width and alignment flags (e.g. %-12s) are supported."
     (define-key map (kbd "RET") #'spacelift-stack-list-visit)
     (define-key map (kbd "R") #'spacelift-stack-list-runs)
     (define-key map (kbd "w") #'spacelift-stack-list-browse)
+    (define-key map (kbd "y") #'spacelift-stack-list-copy-url)
     (define-key map (kbd "l") #'spacelift-stack-list-latest-logs)
     (define-key map (kbd "c") #'spacelift-stack-list-confirm)
     (define-key map (kbd "t") #'spacelift-stack-list-retry)
@@ -395,6 +409,15 @@ Width and alignment flags (e.g. %-12s) are supported."
       (user-error "No stack on this line"))
     (spacelift-with-auth
       (browse-url (spacelift-stack-url (spacelift-stack-id stack))))))
+
+(defun spacelift-stack-list-copy-url ()
+  "Copy the Spacelift console URL of the stack on the current line."
+  (interactive)
+  (let ((stack (spacelift-stack-list-stack-at-point)))
+    (unless stack
+      (user-error "No stack on this line"))
+    (spacelift-with-auth
+      (spacelift--copy-url (spacelift-stack-url (spacelift-stack-id stack))))))
 
 (defun spacelift-stack-list-latest-logs (&optional tail)
   "View the latest run logs of the stack on the current line.
@@ -485,6 +508,7 @@ When `spacectl' is not authenticated, offer to log in instead."
   (let ((map (make-sparse-keymap)))
     (define-key map (kbd "R") #'spacelift-stack-runs)
     (define-key map (kbd "w") #'spacelift-stack-browse)
+    (define-key map (kbd "y") #'spacelift-stack-copy-url)
     (define-key map (kbd "l") #'spacelift-stack-latest-logs)
     (define-key map (kbd "c") #'spacelift-stack-confirm)
     (define-key map (kbd "t") #'spacelift-stack-retry)
@@ -629,6 +653,15 @@ When `spacectl' is not authenticated, offer to log in instead."
   (spacelift-with-auth
     (browse-url (spacelift-stack-url (spacelift-stack-id spacelift--stack)))))
 
+(defun spacelift-stack-copy-url ()
+  "Copy the Spacelift console URL of the stack in the current detail buffer."
+  (interactive)
+  (unless (and (derived-mode-p 'spacelift-stack-mode) spacelift--stack)
+    (user-error "Not in a Spacelift stack buffer"))
+  (spacelift-with-auth
+    (spacelift--copy-url
+     (spacelift-stack-url (spacelift-stack-id spacelift--stack)))))
+
 (defun spacelift-stack-latest-logs (&optional tail)
   "View the latest run logs of the stack in the current detail buffer.
 With a prefix argument TAIL, follow the run as it progresses."
@@ -678,6 +711,7 @@ When `spacectl' is not authenticated, offer to log in instead."
   (let ((map (make-sparse-keymap)))
     (define-key map (kbd "RET") #'spacelift-run-list-visit)
     (define-key map (kbd "w") #'spacelift-run-browse)
+    (define-key map (kbd "y") #'spacelift-run-copy-url)
     (define-key map (kbd "l") #'spacelift-run-logs)
     (define-key map (kbd "c") #'spacelift-run-confirm-at-point)
     (define-key map (kbd "t") #'spacelift-run-retry-at-point)
@@ -765,6 +799,7 @@ When `spacectl' is not authenticated, offer to log in instead."
 (defvar spacelift-run-mode-map
   (let ((map (make-sparse-keymap)))
     (define-key map (kbd "w") #'spacelift-run-browse)
+    (define-key map (kbd "y") #'spacelift-run-copy-url)
     (define-key map (kbd "l") #'spacelift-run-logs)
     (define-key map (kbd "c") #'spacelift-run-confirm-at-point)
     (define-key map (kbd "t") #'spacelift-run-retry-at-point)
@@ -865,6 +900,17 @@ displayed in a run detail buffer."
         (browse-url url)
         (message "Browsing %s" url)))))
 
+(defun spacelift-run-copy-url ()
+  "Copy the Spacelift console URL of the run at point or current buffer.
+Works on the run under point in a run list buffer, and on the run
+displayed in a run detail buffer."
+  (interactive)
+  (let ((run (spacelift--run-at-point-or-current)))
+    (unless run
+      (user-error "No run at point or in the current buffer"))
+    (spacelift-with-auth
+      (spacelift--copy-url (spacelift-run-browse-url run)))))
+
 (defun spacelift-run-confirm-at-point ()
   "Confirm the unconfirmed run at point or in the current buffer.
 Works on the run under point in a run list buffer and on the run shown
@@ -925,6 +971,7 @@ Nil when the buffer streams the stack's latest run via `--run-latest'.")
 (defvar spacelift-run-log-mode-map
   (let ((map (make-sparse-keymap)))
     (define-key map (kbd "w") #'spacelift-run-log-browse)
+    (define-key map (kbd "y") #'spacelift-run-log-copy-url)
     (define-key map (kbd "r") #'spacelift-run-log-refresh)
     (define-key map (kbd "g") #'spacelift-run-log-refresh)
     (define-key map (kbd "G") #'spacelift-run-log-tail)
@@ -1036,6 +1083,18 @@ Opens the run URL when known, or the stack URL for a latest-run buffer."
       (browse-url url)
       (message "Browsing %s" url))))
 
+(defun spacelift-run-log-copy-url ()
+  "Copy the Spacelift console URL for the current log buffer.
+Copies the run URL when known, or the stack URL for a latest-run buffer."
+  (interactive)
+  (unless (and (derived-mode-p 'spacelift-run-log-mode) spacelift--log-stack-id)
+    (user-error "Not in a Spacelift run log buffer"))
+  (spacelift-with-auth
+    (spacelift--copy-url
+     (if spacelift--log-run
+         (spacelift-run-browse-url spacelift--log-run)
+       (spacelift-stack-url spacelift--log-stack-id)))))
+
 (defun spacelift-run-log-quit ()
   "Stop any running log process and quit the log window."
   (interactive)
@@ -1091,6 +1150,7 @@ run detail buffer, or the run of the current log buffer."
     (evil-define-key* '(motion normal) spacelift-run-list-mode-map
       (kbd "RET") #'spacelift-run-list-visit
       "w" #'spacelift-run-browse
+      "y" #'spacelift-run-copy-url
       "l" #'spacelift-run-logs
       "c" #'spacelift-run-confirm-at-point
       "t" #'spacelift-run-retry-at-point
@@ -1099,6 +1159,7 @@ run detail buffer, or the run of the current log buffer."
       "?" #'spacelift-help)
     (evil-define-key* '(motion normal) spacelift-run-mode-map
       "w" #'spacelift-run-browse
+      "y" #'spacelift-run-copy-url
       "l" #'spacelift-run-logs
       "c" #'spacelift-run-confirm-at-point
       "t" #'spacelift-run-retry-at-point
@@ -1107,6 +1168,7 @@ run detail buffer, or the run of the current log buffer."
       "?" #'spacelift-help)
     (evil-define-key* '(motion normal) spacelift-run-log-mode-map
       "w" #'spacelift-run-log-browse
+      "y" #'spacelift-run-log-copy-url
       "r" #'spacelift-run-log-refresh
       "G" #'spacelift-run-log-tail
       "q" #'spacelift-run-log-quit
@@ -1114,12 +1176,14 @@ run detail buffer, or the run of the current log buffer."
     (evil-define-key* '(motion normal) spacelift-stack-list-mode-map
       "R" #'spacelift-stack-list-runs
       "w" #'spacelift-stack-list-browse
+      "y" #'spacelift-stack-list-copy-url
       "l" #'spacelift-stack-list-latest-logs
       "c" #'spacelift-stack-list-confirm
       "t" #'spacelift-stack-list-retry)
     (evil-define-key* '(motion normal) spacelift-stack-mode-map
       "R" #'spacelift-stack-runs
       "w" #'spacelift-stack-browse
+      "y" #'spacelift-stack-copy-url
       "l" #'spacelift-stack-latest-logs
       "c" #'spacelift-stack-confirm
       "t" #'spacelift-stack-retry)))

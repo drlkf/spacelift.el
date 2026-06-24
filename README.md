@@ -39,6 +39,7 @@ Stack list and stack detail buffers:
 | `RET` | Visit the stack (list buffer only) |
 | `R`   | Open the stack's run list |
 | `w`   | Browse the stack in the Spacelift console |
+| `y`   | Copy the stack's Spacelift console URL to the kill ring |
 | `l`   | View the stack's latest run logs (`C-u l` to follow/tail) |
 | `c`   | Confirm the stack's latest run if unconfirmed (asks first) |
 | `j`/`k`, `n`/`p` | Move down/up (list buffer) |
@@ -52,6 +53,7 @@ Run list and run detail buffers:
 | `?`   | Show a magit-style popup of the available keys |
 | `RET` | Visit the run (list buffer only) |
 | `w`   | Browse the run URL in the Spacelift console |
+| `y`   | Copy the run's Spacelift console URL to the kill ring |
 | `l`   | View the run's logs (`C-u l` to follow/tail) |
 | `c`   | Confirm an unconfirmed run (asks first) |
 | `j`/`k`, `n`/`p` | Move down/up (list buffer) |
@@ -63,6 +65,7 @@ Run log buffers:
 | `r`   | Reload the logs      |
 | `G`   | Toggle following (tailing) the run |
 | `w`   | Browse the run URL in the Spacelift console |
+| `y`   | Copy the run/stack Spacelift console URL to the kill ring |
 | `q`   | Stop the log process and quit the window |
 | `?`   | Show a magit-style popup of the available keys |
 
