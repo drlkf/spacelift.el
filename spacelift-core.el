@@ -35,6 +35,7 @@
 ;;; Code:
 
 (require 'json)
+(require 'seq)
 
 (defgroup spacelift nil
   "Interact with the Spacelift service from Emacs."
@@ -58,6 +59,20 @@ current profile.  When nil, the profile already selected in
 (defcustom spacelift-login-offer t
   "When non-nil, offer to log in when `spacectl' is not authenticated."
   :type 'boolean
+  :group 'spacelift)
+
+(defcustom spacelift-login-method nil
+  "Authentication method passed to `spacectl profile login' via `--method'.
+When nil, `spacectl' prompts for the method interactively.  Set to one
+of the supported method symbols to skip that prompt:
+
+  `browser' - authenticate through a web browser;
+  `api'     - authenticate with an API key and secret;
+  `github'  - authenticate with a GitHub access token."
+  :type '(choice (const :tag "Ask interactively" nil)
+                 (const :tag "Web browser" browser)
+                 (const :tag "API key" api)
+                 (const :tag "GitHub access token" github))
   :group 'spacelift)
 
 (define-error 'spacelift-error "Spacelift error")
@@ -148,12 +163,53 @@ symbols.  Signal a `spacelift-error' on failure to parse."
 
 ;;; Authentication and login
 
+(defun spacelift--token-payload ()
+  "Return the decoded payload of the current session token as an alist.
+The token is obtained through `spacectl profile export-token' and its
+JWT payload segment is base64url-decoded and parsed as JSON.  Return nil
+when no token is available or it cannot be decoded.
+
+`spacectl profile current' and `profile export-token' only reflect the
+stored profile, not whether its token is still valid, so the expiry must
+be inspected from the payload itself."
+  (let ((token (condition-case nil
+                   (string-trim (spacelift--run "profile" "export-token"))
+                 (spacelift-error nil))))
+    (when (and token (not (string-empty-p token)))
+      (let ((segments (split-string token "\\.")))
+        (when (>= (length segments) 2)
+          (condition-case nil
+              (let* ((payload (nth 1 segments))
+                     ;; JWT uses base64url without padding; translate to
+                     ;; standard base64 and pad before decoding.
+                     (b64 (replace-regexp-in-string
+                           "_" "/" (replace-regexp-in-string "-" "+" payload)))
+                     (padded (concat b64 (make-string
+                                          (mod (- 4 (mod (length b64) 4)) 4)
+                                          ?=)))
+                     (json (decode-coding-string
+                            (base64-decode-string padded) 'utf-8))
+                     (json-object-type 'alist)
+                     (json-key-type 'symbol)
+                     (json-false nil)
+                     (json-null nil))
+                (json-read-from-string json))
+            (error nil)))))))
+
+(defun spacelift--session-valid-p ()
+  "Return non-nil when the current session token exists and is unexpired.
+Decodes the session token's `exp' claim and compares it to the current
+time.  This is the reliable signal for whether `spacectl' can actually
+authenticate, since the live API check (`whoami') and the stored profile
+listing can disagree with the token's real validity."
+  (let* ((payload (spacelift--token-payload))
+         (exp (and payload (spacelift--alist-get 'exp payload))))
+    (and (numberp exp)
+         (> exp (float-time)))))
+
 (defun spacelift-authenticated-p ()
-  "Return non-nil when `spacectl' has valid Spacelift credentials."
-  (condition-case nil
-      (progn (spacelift--run "whoami") t)
-    (spacelift-not-authenticated nil)
-    (spacelift-error nil)))
+  "Return non-nil when `spacectl' has a valid, unexpired Spacelift session."
+  (spacelift--session-valid-p))
 
 (declare-function term-char-mode "term")
 
@@ -161,75 +217,174 @@ symbols.  Signal a `spacelift-error' on failure to parse."
   "Return the login terminal buffer name for profile ALIAS."
   (format "*spacelift-login: %s*" alias))
 
+(defun spacelift--profiles ()
+  "Return the configured `spacectl' profiles as a list of alists.
+Each entry contains at least `alias', `endpoint', `type' and `current'.
+Return nil when the listing cannot be obtained or parsed."
+  (condition-case nil
+      (spacelift--run-json "profile" "list")
+    (spacelift-error nil)))
+
+(defun spacelift--profile-endpoint (alias)
+  "Return the stored endpoint for profile ALIAS, or nil when unknown."
+  (let ((entry (seq-find (lambda (p)
+                           (equal (spacelift--alist-get 'alias p) alias))
+                         (spacelift--profiles))))
+    (spacelift--alist-get 'endpoint entry)))
+
+(defun spacelift--current-profile-alias ()
+  "Return the alias of the current `spacectl' profile, or nil when none."
+  (spacelift--alist-get
+   'alias (seq-find (lambda (p) (spacelift--alist-get 'current p))
+                    (spacelift--profiles))))
+
+(defun spacelift--default-login-alias ()
+  "Return the best default alias to log in with.
+Prefers `spacelift-profile', then the current `spacectl' profile."
+  (or spacelift-profile (spacelift--current-profile-alias)))
+
+(defun spacelift--login-sentinel (alias on-success orig-sentinel)
+  "Build a process sentinel for the login terminal of profile ALIAS.
+The returned sentinel first calls ORIG-SENTINEL (the terminal's own
+sentinel), then, when `spacectl' exits successfully and a valid session
+exists, kills the login buffer and calls ON-SUCCESS, if any, to resume
+the originally requested operation."
+  (lambda (process event)
+    (when (functionp orig-sentinel)
+      (funcall orig-sentinel process event))
+    (when (memq (process-status process) '(exit signal))
+      (let ((buffer (process-buffer process)))
+        (if (and (eq (process-status process) 'exit)
+                 (eq (process-exit-status process) 0)
+                 (spacelift--session-valid-p))
+            (progn
+              (when (buffer-live-p buffer)
+                (let ((window (get-buffer-window buffer t)))
+                  (kill-buffer buffer)
+                  (when (window-live-p window)
+                    (ignore-errors (delete-window window)))))
+              (message "Spacelift login for %s complete." alias)
+              (when (functionp on-success)
+                (funcall on-success)))
+          (message "Spacelift login for %s did not complete." alias))))))
+
 ;;;###autoload
-(defun spacelift-profile-login (alias)
+(defun spacelift-profile-login (alias &optional on-success)
   "Log in to Spacelift by running `spacectl profile login' for ALIAS.
-The interactive login flow (endpoint prompt, authentication method,
-browser handoff) runs in a dedicated terminal buffer, since it
-requires user input.  Returns the login buffer."
+When ALIAS already has a valid, unexpired session, no login is started
+and ON-SUCCESS, if any, is called immediately; the function returns nil.
+Otherwise the interactive login flow runs in a dedicated terminal
+buffer.  The stored endpoint is reused via `--endpoint', and
+`spacelift-login-method', when set, is passed via `--method' to skip the
+method prompt.
+
+When the login process exits successfully, the terminal buffer is killed
+and ON-SUCCESS, a function of no arguments, is called to resume the
+operation that triggered the login.  Returns the login buffer."
   (interactive
    (list (read-string "Spacelift profile alias: "
-                      (or spacelift-profile ""))))
+                      (or (spacelift--default-login-alias) ""))))
   (when (or (null alias) (string-empty-p alias))
     (user-error "A profile alias is required to log in"))
-  (require 'term)
-  (let* ((buffer-name (spacelift--login-buffer-name alias))
-         (buffer (get-buffer buffer-name)))
-    (when (and buffer (get-buffer-process buffer))
-      (user-error "A login is already in progress in %s" buffer-name))
-    ;; `make-term' wraps the name in earmuffs and starts the process in
-    ;; `term-mode'; only character mode needs to be enabled for input.
-    (setq buffer
-          (make-term (string-remove-prefix
-                      "*" (string-remove-suffix "*" buffer-name))
-                     spacelift-spacectl-executable nil
-                     "profile" "login" alias))
-    (with-current-buffer buffer
-      (term-char-mode))
-    (pop-to-buffer buffer)
-    (message "Complete the Spacelift login in %s, then retry." buffer-name)
-    buffer))
+  ;; Recognise an existing, still-valid session and proceed without forcing
+  ;; a fresh interactive login.
+  (if (and (equal alias (spacelift--default-login-alias))
+           (spacelift--session-valid-p))
+      (progn
+        (message "Spacelift session for %s is still valid; skipping login."
+                 alias)
+        (when (functionp on-success)
+          (funcall on-success))
+        nil)
+    (require 'term)
+    (let* ((buffer-name (spacelift--login-buffer-name alias))
+           (buffer (get-buffer buffer-name))
+           ;; Reuse the stored endpoint when the profile already exists so
+           ;; `spacectl' does not prompt for it from scratch.
+           (endpoint (spacelift--profile-endpoint alias))
+           (args (append (list "profile" "login" alias)
+                         (when endpoint (list "--endpoint" endpoint))
+                         (when spacelift-login-method
+                           (list "--method"
+                                 (symbol-name spacelift-login-method))))))
+      (when (and buffer (get-buffer-process buffer))
+        (user-error "A login is already in progress in %s" buffer-name))
+      ;; `make-term' wraps the name in earmuffs and starts the process in
+      ;; `term-mode'; only character mode needs to be enabled for input.
+      (setq buffer
+            (apply #'make-term
+                   (string-remove-prefix
+                    "*" (string-remove-suffix "*" buffer-name))
+                   spacelift-spacectl-executable nil
+                   args))
+      (with-current-buffer buffer
+        (term-char-mode))
+      ;; Chain onto the terminal's own sentinel so that a successful login
+      ;; kills the buffer and resumes the requested operation.
+      (let ((process (get-buffer-process buffer)))
+        (set-process-sentinel
+         process
+         (spacelift--login-sentinel alias on-success
+                                    (process-sentinel process))))
+      (pop-to-buffer buffer)
+      (message "Complete the Spacelift login in %s; it will resume on success."
+               buffer-name)
+      buffer)))
 
-(defun spacelift--maybe-offer-login (error-data)
+(defun spacelift--maybe-offer-login (error-data &optional on-success)
   "Offer to log in after an authentication failure described by ERROR-DATA.
-Signal `spacelift-not-authenticated' again when the user declines or
-when `spacelift-login-offer' is nil."
+When the user accepts, start the login flow for the default profile and,
+on success, call ON-SUCCESS to resume the requested operation.  Signal
+`spacelift-not-authenticated' again when the user declines or when
+`spacelift-login-offer' is nil."
   (if (and spacelift-login-offer
            (y-or-n-p "Not logged in to Spacelift.  Log in now? "))
-      (call-interactively #'spacelift-profile-login)
+      (spacelift-profile-login
+       (or (spacelift--default-login-alias)
+           (read-string "Spacelift profile alias: "))
+       on-success)
     (signal 'spacelift-not-authenticated error-data)))
+
+(defun spacelift--call-with-auth (thunk)
+  "Call THUNK, offering an interactive login on authentication failure.
+When THUNK signals `spacelift-not-authenticated' and
+`spacelift-login-offer' is non-nil, the user is asked whether to log in.
+If they accept, a login terminal is opened and THUNK is re-run once the
+login succeeds, resuming the originally requested operation."
+  (condition-case spacelift--err
+      (progn
+        (spacelift--select-profile)
+        (funcall thunk))
+    (spacelift-not-authenticated
+     (spacelift--maybe-offer-login
+      (cdr spacelift--err)
+      (lambda () (spacelift--call-with-auth thunk))))))
 
 (defmacro spacelift-with-auth (&rest body)
   "Evaluate BODY, offering an interactive login on authentication failure.
 When BODY signals `spacelift-not-authenticated' and
-`spacelift-login-offer' is non-nil, the user is asked whether to log
-in.  If they accept, a login terminal is opened; BODY is not retried
-automatically, so the caller should be re-invoked after logging in."
+`spacelift-login-offer' is non-nil, the user is asked whether to log in.
+If they accept, a login terminal is opened; once the login succeeds the
+terminal is killed and BODY is re-run to resume the requested
+operation."
   (declare (indent 0) (debug t))
-  `(condition-case spacelift--err
-       (progn
-         (spacelift--select-profile)
-         ,@body)
-     (spacelift-not-authenticated
-      (spacelift--maybe-offer-login (cdr spacelift--err)))))
+  `(spacelift--call-with-auth (lambda () ,@body)))
 
 ;;; Account endpoint and console URLs
 
 (defvar spacelift--endpoint nil
-  "Cached Spacelift account endpoint URL, as reported by `spacectl whoami'.")
+  "Cached Spacelift account endpoint URL, from `spacectl profile list'.")
 
 (defun spacelift-endpoint (&optional refresh)
   "Return the Spacelift account endpoint URL.
-For example, \"https://acme.app.spacelift.io\".  The value is queried
-once through `spacectl whoami' and cached.  With REFRESH non-nil, query
-`spacectl' again and update the cache."
+For example, \"https://acme.app.spacelift.io\".  The endpoint is read
+from the current profile reported by `spacectl profile list' and cached.
+With REFRESH non-nil, query `spacectl' again and update the cache."
   (when (or refresh (null spacelift--endpoint))
-    (let* ((data (let ((json-object-type 'alist)
-                       (json-key-type 'symbol)
-                       (json-false nil)
-                       (json-null nil))
-                   (json-read-from-string (spacelift--run "whoami"))))
-           (endpoint (spacelift--alist-get 'endpoint data)))
+    (let* ((current (seq-find (lambda (p)
+                                (spacelift--alist-get 'current p))
+                              (spacelift--profiles)))
+           (endpoint (spacelift--alist-get 'endpoint current)))
       (unless endpoint
         (signal 'spacelift-error
                 (list "Could not determine the Spacelift account endpoint")))
