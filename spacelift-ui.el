@@ -112,6 +112,7 @@ The following `format-spec' style specifiers are available:
       the stack, otherwise the stack's settled state)
   %b  tracked branch
   %a  tracked commit author (falling back to login)
+  %c  tracked short commit hash
   %p  worker pool name
   %r  repository
   %S  space name
@@ -198,23 +199,29 @@ Width and alignment flags (e.g. %-12s) are supported."
                (propertize label 'face 'spacelift-label-face))
              labels ", "))
 
+(defun spacelift--short-hash (commit)
+  "Return the short hash of COMMIT, or an empty string when unavailable."
+  (let ((hash (and commit (spacelift-commit-hash commit))))
+    (if hash (substring hash 0 (min 8 (length hash))) "")))
+
 (defun spacelift--stack-line (stack)
   "Render STACK into a single display line using `spacelift-stack-line-format'."
-  (format-spec
-   spacelift-stack-line-format
-   `((?n . ,(or (spacelift-stack-name stack) ""))
-     (?i . ,(or (spacelift-stack-id stack) ""))
-     (?s . ,(spacelift--propertize-state (spacelift-stack-display-state stack)))
-     (?b . ,(or (spacelift-stack-branch stack) ""))
-     (?a . ,(let ((commit (spacelift-stack-tracked-commit stack)))
-              (or (and commit (or (spacelift-commit-author commit)
+  (let ((commit (spacelift-stack-tracked-commit stack)))
+    (format-spec
+     spacelift-stack-line-format
+     `((?n . ,(or (spacelift-stack-name stack) ""))
+       (?i . ,(or (spacelift-stack-id stack) ""))
+       (?s . ,(spacelift--propertize-state (spacelift-stack-display-state stack)))
+       (?b . ,(or (spacelift-stack-branch stack) ""))
+       (?a . ,(or (and commit (or (spacelift-commit-author commit)
                                   (spacelift-commit-login commit)))
-                  "")))
-     (?p . ,(or (spacelift-stack-worker-pool-name stack) ""))
-     (?r . ,(or (spacelift-stack-repository stack) ""))
-     (?S . ,(or (spacelift-stack-space-name stack) ""))
-     (?d . ,(or (spacelift-stack-description stack) ""))
-     (?l . ,(spacelift--format-labels (spacelift-stack-labels stack))))))
+                  ""))
+       (?c . ,(spacelift--short-hash commit))
+       (?p . ,(or (spacelift-stack-worker-pool-name stack) ""))
+       (?r . ,(or (spacelift-stack-repository stack) ""))
+       (?S . ,(or (spacelift-stack-space-name stack) ""))
+       (?d . ,(or (spacelift-stack-description stack) ""))
+       (?l . ,(spacelift--format-labels (spacelift-stack-labels stack)))))))
 
 (defun spacelift--run-line (run)
   "Render RUN into a single display line using `spacelift-run-line-format'."
@@ -225,8 +232,7 @@ Width and alignment flags (e.g. %-12s) are supported."
        (?s . ,(spacelift--propertize-state (spacelift-run-state run)))
        (?t . ,(or (spacelift-run-title run) ""))
        (?b . ,(or (spacelift-run-branch run) ""))
-       (?c . ,(let ((hash (and commit (spacelift-commit-hash commit))))
-                (if hash (substring hash 0 (min 8 (length hash))) "")))
+       (?c . ,(spacelift--short-hash commit))
        (?a . ,(or (and commit (or (spacelift-commit-author commit)
                                   (spacelift-commit-login commit)))
                   ""))
