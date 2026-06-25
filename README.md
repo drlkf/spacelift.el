@@ -93,6 +93,7 @@ Stack line specifiers:
 | `%i` | stack id (slug)    |
 | `%s` | current state (the blocking run's state when a run is blocking the stack, otherwise the stack's settled state) |
 | `%b` | tracked branch     |
+| `%a` | tracked commit author (falling back to login) |
 | `%p` | worker pool name   |
 | `%r` | repository         |
 | `%S` | space name         |
@@ -109,6 +110,7 @@ Run line specifiers:
 | `%b` | branch             |
 | `%c` | short commit hash  |
 | `%a` | commit author      |
+| `%A` | triggerer (trigger source, falling back to the commit author) |
 | `%d` | creation date      |
 | `%T` | trigger source     |
 | `%D` | resource delta (added/changed/deleted) |

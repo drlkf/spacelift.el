@@ -101,7 +101,7 @@
 
 ;;; Customization
 
-(defcustom spacelift-stack-line-format "%-30n  %-10s  %-20p  %l"
+(defcustom spacelift-stack-line-format "%-30n  %-10s  %-18a  %-20p  %l"
   "Format string for a stack line in the stack list buffer.
 The following `format-spec' style specifiers are available:
 
@@ -110,6 +110,7 @@ The following `format-spec' style specifiers are available:
   %s  current state (the blocking run's state when a run is blocking
       the stack, otherwise the stack's settled state)
   %b  tracked branch
+  %a  tracked commit author (falling back to login)
   %p  worker pool name
   %r  repository
   %S  space name
@@ -125,7 +126,7 @@ Width and alignment flags (e.g. %-30n) are supported."
   :type 'string
   :group 'spacelift)
 
-(defcustom spacelift-run-line-format "%-12c  %-17s  %-19d  %t"
+(defcustom spacelift-run-line-format "%-12c  %-17s  %-16A  %-19d  %t"
   "Format string for a run line in the run list buffer.
 The following `format-spec' style specifiers are available:
 
@@ -135,6 +136,7 @@ The following `format-spec' style specifiers are available:
   %b  branch
   %c  short commit hash
   %a  commit author
+  %A  triggerer (trigger source, falling back to the commit author)
   %d  creation date
   %T  trigger source
   %D  resource delta (added/changed/deleted)
@@ -200,6 +202,10 @@ Width and alignment flags (e.g. %-12s) are supported."
      (?i . ,(or (spacelift-stack-id stack) ""))
      (?s . ,(spacelift--propertize-state (spacelift-stack-display-state stack)))
      (?b . ,(or (spacelift-stack-branch stack) ""))
+     (?a . ,(let ((commit (spacelift-stack-tracked-commit stack)))
+              (or (and commit (or (spacelift-commit-author commit)
+                                  (spacelift-commit-login commit)))
+                  "")))
      (?p . ,(or (spacelift-stack-worker-pool-name stack) ""))
      (?r . ,(or (spacelift-stack-repository stack) ""))
      (?S . ,(or (spacelift-stack-space-name stack) ""))
@@ -218,6 +224,10 @@ Width and alignment flags (e.g. %-12s) are supported."
        (?c . ,(let ((hash (and commit (spacelift-commit-hash commit))))
                 (if hash (substring hash 0 (min 8 (length hash))) "")))
        (?a . ,(or (and commit (or (spacelift-commit-author commit)
+                                  (spacelift-commit-login commit)))
+                  ""))
+       (?A . ,(or (spacelift-run-triggered-by run)
+                  (and commit (or (spacelift-commit-author commit)
                                   (spacelift-commit-login commit)))
                   ""))
        (?d . ,(spacelift--format-unix-time (spacelift-run-created-at run)))
