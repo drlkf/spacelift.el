@@ -161,6 +161,38 @@ symbols.  Signal a `spacelift-error' on failure to parse."
                (list (format "Failed to parse JSON output: %s"
                              (error-message-string err))))))))
 
+(defun spacelift--run-graphql (query &optional variables)
+  "Run the GraphQL QUERY through `spacectl api' and return its `data' alist.
+VARIABLES, when non-nil, is an alist of GraphQL variables passed via
+`--variables' as JSON.  `spacectl api' emits the raw response, so it is
+parsed with the same settings as `spacelift--run-json'.  Signal a
+`spacelift-error' when the response cannot be parsed or carries GraphQL
+errors."
+  (let* ((args (append (list "api" "--raw" query)
+                       (when variables
+                         (list "--variables" (json-encode variables)))))
+         (output (apply #'spacelift--run args)))
+    (condition-case err
+        (let* ((json-object-type 'alist)
+               (json-array-type 'list)
+               (json-key-type 'symbol)
+               (json-false nil)
+               (json-null nil)
+               (response (json-read-from-string output))
+               (errors (alist-get 'errors response)))
+          (when errors
+            (signal 'spacelift-error
+                    (list (format "GraphQL error: %s"
+                                  (or (alist-get 'message (car errors))
+                                      errors)))))
+          (alist-get 'data response))
+      (spacelift-not-authenticated (signal (car err) (cdr err)))
+      (spacelift-error (signal (car err) (cdr err)))
+      (error
+       (signal 'spacelift-error
+               (list (format "Failed to parse GraphQL output: %s"
+                             (error-message-string err))))))))
+
 ;;; Authentication and login
 
 (defun spacelift--token-payload ()

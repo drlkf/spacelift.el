@@ -91,7 +91,7 @@ Stack line specifiers:
 |------|--------------------|
 | `%n` | stack name         |
 | `%i` | stack id (slug)    |
-| `%s` | current state      |
+| `%s` | current state (the blocking run's state when a run is blocking the stack, otherwise the stack's settled state) |
 | `%b` | tracked branch     |
 | `%p` | worker pool name   |
 | `%r` | repository         |

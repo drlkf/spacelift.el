@@ -107,7 +107,8 @@ The following `format-spec' style specifiers are available:
 
   %n  stack name
   %i  stack id (slug)
-  %s  current state
+  %s  current state (the blocking run's state when a run is blocking
+      the stack, otherwise the stack's settled state)
   %b  tracked branch
   %p  worker pool name
   %r  repository
@@ -197,7 +198,7 @@ Width and alignment flags (e.g. %-12s) are supported."
    spacelift-stack-line-format
    `((?n . ,(or (spacelift-stack-name stack) ""))
      (?i . ,(or (spacelift-stack-id stack) ""))
-     (?s . ,(spacelift--propertize-state (spacelift-stack-state stack)))
+     (?s . ,(spacelift--propertize-state (spacelift-stack-display-state stack)))
      (?b . ,(or (spacelift-stack-branch stack) ""))
      (?p . ,(or (spacelift-stack-worker-pool-name stack) ""))
      (?r . ,(or (spacelift-stack-repository stack) ""))
@@ -594,7 +595,7 @@ When `spacectl' is not authenticated, offer to log in instead."
                             (spacelift-stack-id stack))
                         'face '(spacelift-heading-face (:height 1.2)))
             "  "
-            (spacelift--propertize-state (spacelift-stack-state stack))
+            (spacelift--propertize-state (spacelift-stack-display-state stack))
             "\n\n")
 
     (spacelift--insert-heading "General")
