@@ -136,14 +136,18 @@ STACKS."
   "Return a list of `spacelift-stack' the user has access to.
 SEARCH, when non-nil, is a full-text search string.  LIMIT, when
 non-nil, caps the number of returned stacks.  Stacks with a blocking run
-are enriched with that run's state in `blocker-state'."
+are enriched with that run's state in `blocker-state'.  The returned
+stacks are sorted case-insensitively by name."
   (let ((args '("stack" "list")))
     (when search
       (setq args (append args (list "--search" search))))
     (when limit
       (setq args (append args (list "--limit" (number-to-string limit)))))
-    (spacelift-stack--enrich-blocker-states
-     (mapcar #'spacelift-stack--parse (apply #'spacelift--run-json args)))))
+    (seq-sort-by (lambda (stack) (downcase (or (spacelift-stack-name stack) "")))
+                 #'string-lessp
+                 (spacelift-stack--enrich-blocker-states
+                  (mapcar #'spacelift-stack--parse
+                          (apply #'spacelift--run-json args))))))
 
 (defun spacelift-stack-show (id)
   "Return the detailed `spacelift-stack' identified by ID.
