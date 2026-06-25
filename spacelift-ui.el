@@ -32,7 +32,8 @@
 ;;
 ;; - The stack list buffer (`spacelift-stack-list-mode'), one line per
 ;;   stack, formatted according to `spacelift-stack-line-format'.  Press
-;;   RET on a stack to open its detail buffer, or `R' for its runs.
+;;   RET on a stack to open its detail buffer, or `R' for its runs.  `f'
+;;   toggles showing only non-successful (not FINISHED) stacks.
 ;;
 ;; - The stack detail buffer (`spacelift-stack-mode'), showing all
 ;;   available stack information in a readable layout.
@@ -161,6 +162,9 @@ Width and alignment flags (e.g. %-12s) are supported."
 (defvar-local spacelift--list-limit nil
   "Limit used to populate the current stack list buffer.")
 
+(defvar-local spacelift--list-only-unsuccessful nil
+  "When non-nil, the current stack list buffer hides successful stacks.")
+
 (defvar-local spacelift--run nil
   "The `spacelift-run' displayed in the current run detail buffer.")
 
@@ -261,6 +265,7 @@ Width and alignment flags (e.g. %-12s) are supported."
     ("l" "View latest logs" spacelift-stack-list-latest-logs)
     ("c" "Confirm latest run" spacelift-stack-list-confirm)
     ("t" "Retry latest run" spacelift-stack-list-retry)
+    ("f" "Toggle non-successful only" spacelift-stack-list-toggle-unsuccessful)
     ("r" "Reload" spacelift-stack-list-refresh)]
    ["Window"
     ("q" "Quit window" quit-window)
@@ -349,6 +354,7 @@ Width and alignment flags (e.g. %-12s) are supported."
     (define-key map (kbd "l") #'spacelift-stack-list-latest-logs)
     (define-key map (kbd "c") #'spacelift-stack-list-confirm)
     (define-key map (kbd "t") #'spacelift-stack-list-retry)
+    (define-key map (kbd "f") #'spacelift-stack-list-toggle-unsuccessful)
     (define-key map (kbd "r") #'spacelift-stack-list-refresh)
     (define-key map (kbd "g") #'spacelift-stack-list-refresh)
     (define-key map (kbd "q") #'quit-window)
@@ -379,18 +385,41 @@ Width and alignment flags (e.g. %-12s) are supported."
                 "\n")))
     (goto-char (point-min))))
 
+(defun spacelift--list-stacks ()
+  "Fetch the stacks for the current stack list buffer, honoring its filter.
+Must be called within a `spacelift-stack-list-mode' buffer.  When
+`spacelift--list-only-unsuccessful' is non-nil, successful stacks are
+omitted."
+  (let ((stacks (spacelift-stack-list spacelift--list-search
+                                      spacelift--list-limit)))
+    (if spacelift--list-only-unsuccessful
+        (seq-remove #'spacelift-stack-successful-p stacks)
+      stacks)))
+
 (defun spacelift-stack-list-refresh ()
   "Reload the stacks shown in the current stack list buffer."
   (interactive)
   (unless (derived-mode-p 'spacelift-stack-list-mode)
     (user-error "Not in a Spacelift stack list buffer"))
   (spacelift-with-auth
-    (let ((stacks (spacelift-stack-list spacelift--list-search
-                                        spacelift--list-limit))
+    (let ((stacks (spacelift--list-stacks))
           (line (line-number-at-pos)))
       (spacelift--insert-stack-list stacks)
       (forward-line (1- line))
-      (message "Loaded %d stack(s)" (length stacks)))))
+      (message "Loaded %d stack(s)%s" (length stacks)
+               (if spacelift--list-only-unsuccessful
+                   " (non-successful only)"
+                 "")))))
+
+(defun spacelift-stack-list-toggle-unsuccessful ()
+  "Toggle showing only non-successful stacks in the current list buffer.
+Non-successful stacks are those whose displayed state is not FINISHED."
+  (interactive)
+  (unless (derived-mode-p 'spacelift-stack-list-mode)
+    (user-error "Not in a Spacelift stack list buffer"))
+  (setq spacelift--list-only-unsuccessful
+        (not spacelift--list-only-unsuccessful))
+  (spacelift-stack-list-refresh))
 
 (defun spacelift-stack-list-stack-at-point ()
   "Return the `spacelift-stack' on the current line, or nil."
@@ -504,13 +533,12 @@ When `spacectl' is not authenticated, offer to log in instead."
    (when current-prefix-arg
      (list (read-string "Search stacks: ") nil)))
   (spacelift-with-auth
-    (let ((stacks (spacelift-stack-list search limit))
-          (buffer (get-buffer-create spacelift-stack-list-buffer-name)))
+    (let ((buffer (get-buffer-create spacelift-stack-list-buffer-name)))
       (with-current-buffer buffer
         (spacelift-stack-list-mode)
         (setq spacelift--list-search search
               spacelift--list-limit limit)
-        (spacelift--insert-stack-list stacks))
+        (spacelift--insert-stack-list (spacelift--list-stacks)))
       (pop-to-buffer buffer))))
 
 ;;; Stack detail buffer
@@ -1190,7 +1218,8 @@ run detail buffer, or the run of the current log buffer."
       "y" #'spacelift-stack-list-copy-url
       "l" #'spacelift-stack-list-latest-logs
       "c" #'spacelift-stack-list-confirm
-      "t" #'spacelift-stack-list-retry)
+      "t" #'spacelift-stack-list-retry
+      "f" #'spacelift-stack-list-toggle-unsuccessful)
     (evil-define-key* '(motion normal) spacelift-stack-mode-map
       "R" #'spacelift-stack-runs
       "w" #'spacelift-stack-browse

@@ -97,6 +97,10 @@ own settled state."
   (or (spacelift-stack-blocker-state stack)
       (spacelift-stack-state stack)))
 
+(defun spacelift-stack-successful-p (stack)
+  "Return non-nil when STACK's displayed state is the successful FINISHED state."
+  (equal (spacelift-stack-display-state stack) "FINISHED"))
+
 ;;; API
 
 ;; The `spacectl' stack listing reports a blocking run only as its id
