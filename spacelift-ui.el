@@ -262,9 +262,9 @@ Width and alignment flags (e.g. %-12s) are supported."
   ["Spacelift stacks"
    ["Navigate"
     ("RET" "Visit stack" spacelift-stack-list-visit)
-    ("R" "List runs" spacelift-stack-list-runs)
     ("j" "Next line" next-line :transient t)
-    ("k" "Previous line" previous-line :transient t)]
+    ("k" "Previous line" previous-line :transient t)
+    ("L" "List runs" spacelift-stack-list-runs)]
    ["Act"
     ("w" "Browse in console" spacelift-stack-list-browse)
     ("y" "Copy URL" spacelift-stack-list-copy-url)
@@ -281,7 +281,7 @@ Width and alignment flags (e.g. %-12s) are supported."
   "Show the available keys in a Spacelift stack detail buffer."
   ["Spacelift stack"
    ["Navigate"
-    ("R" "List runs" spacelift-stack-runs)]
+    ("L" "List runs" spacelift-stack-runs)]
    ["Act"
     ("w" "Browse in console" spacelift-stack-browse)
     ("y" "Copy URL" spacelift-stack-copy-url)
@@ -354,7 +354,7 @@ Width and alignment flags (e.g. %-12s) are supported."
 (defvar spacelift-stack-list-mode-map
   (let ((map (make-sparse-keymap)))
     (define-key map (kbd "RET") #'spacelift-stack-list-visit)
-    (define-key map (kbd "R") #'spacelift-stack-list-runs)
+    (define-key map (kbd "L") #'spacelift-stack-list-runs)
     (define-key map (kbd "w") #'spacelift-stack-list-browse)
     (define-key map (kbd "y") #'spacelift-stack-list-copy-url)
     (define-key map (kbd "l") #'spacelift-stack-list-latest-logs)
@@ -551,7 +551,7 @@ When `spacectl' is not authenticated, offer to log in instead."
 
 (defvar spacelift-stack-mode-map
   (let ((map (make-sparse-keymap)))
-    (define-key map (kbd "R") #'spacelift-stack-runs)
+    (define-key map (kbd "L") #'spacelift-stack-runs)
     (define-key map (kbd "w") #'spacelift-stack-browse)
     (define-key map (kbd "y") #'spacelift-stack-copy-url)
     (define-key map (kbd "l") #'spacelift-stack-latest-logs)
@@ -1219,7 +1219,7 @@ run detail buffer, or the run of the current log buffer."
       "q" #'spacelift-run-log-quit
       "?" #'spacelift-help)
     (evil-define-key* '(motion normal) spacelift-stack-list-mode-map
-      "R" #'spacelift-stack-list-runs
+      "L" #'spacelift-stack-list-runs
       "w" #'spacelift-stack-list-browse
       "y" #'spacelift-stack-list-copy-url
       "l" #'spacelift-stack-list-latest-logs
@@ -1227,7 +1227,7 @@ run detail buffer, or the run of the current log buffer."
       "t" #'spacelift-stack-list-retry
       "f" #'spacelift-stack-list-toggle-unsuccessful)
     (evil-define-key* '(motion normal) spacelift-stack-mode-map
-      "R" #'spacelift-stack-runs
+      "L" #'spacelift-stack-runs
       "w" #'spacelift-stack-browse
       "y" #'spacelift-stack-copy-url
       "l" #'spacelift-stack-latest-logs
