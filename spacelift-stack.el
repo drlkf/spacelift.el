@@ -45,7 +45,8 @@ Slot RAW holds the original parsed alist so that the detail view can
 display fields not promoted to dedicated slots."
   id name description state branch namespace repository provider
   project-root labels autodeploy locked worker-pool-name space-name
-  vendor tracked-commit created-at state-set-at blocker-id blocker-state raw)
+  vendor tracked-commit created-at state-set-at blocker-id blocker-state
+  blocker-commit blocker-branch raw)
 
 (defun spacelift-stack--parse-commit (object)
   "Build a `spacelift-commit' from OBJECT alist, or nil when OBJECT is nil."
@@ -97,6 +98,20 @@ own settled state."
   (or (spacelift-stack-blocker-state stack)
       (spacelift-stack-state stack)))
 
+(defun spacelift-stack-display-commit (stack)
+  "Return the commit to display for STACK.
+When STACK is blocked by a run, return that run's commit, the
+current/blocking run; otherwise return the stack's tracked commit."
+  (or (spacelift-stack-blocker-commit stack)
+      (spacelift-stack-tracked-commit stack)))
+
+(defun spacelift-stack-display-branch (stack)
+  "Return the branch to display for STACK.
+When STACK is blocked by a run, return that run's branch, the
+current/blocking run; otherwise return the stack's tracked branch."
+  (or (spacelift-stack-blocker-branch stack)
+      (spacelift-stack-branch stack)))
+
 (defun spacelift-stack-successful-p (stack)
   "Return non-nil when STACK's displayed state is the successful FINISHED state."
   (equal (spacelift-stack-display-state stack) "FINISHED"))
@@ -104,36 +119,51 @@ own settled state."
 ;;; API
 
 ;; The `spacectl' stack listing reports a blocking run only as its id
-;; (`Blocker'), never its state, so the list keeps showing the stack's
-;; settled state while a run is actually queued or in progress.  The
-;; blocker run's state is fetched separately through GraphQL and promoted
-;; into `blocker-state' so the display can show the current/blocking run.
+;; (`Blocker'), never its details, so the list keeps showing the stack's
+;; settled state and tracked commit while a run is actually queued or in
+;; progress against a different commit.  The blocker run's state, commit
+;; and branch are fetched separately through GraphQL and promoted into the
+;; stack so the display can show the current/blocking run.
 
-(defun spacelift-stack--blocker-state-map ()
-  "Return a hash of stack id to blocker run state for all blocked stacks.
+(defconst spacelift-stack--blocker-fields
+  "state branch commit { hash authorName authorLogin message timestamp url }"
+  "GraphQL selection for the fields promoted from a stack's blocking run.")
+
+(defun spacelift-stack--set-blocker (stack blocker)
+  "Populate STACK's blocker slots from the BLOCKER run alist, in place."
+  (setf (spacelift-stack-blocker-state stack)
+        (spacelift--alist-get 'state blocker))
+  (setf (spacelift-stack-blocker-branch stack)
+        (spacelift--alist-get 'branch blocker))
+  (setf (spacelift-stack-blocker-commit stack)
+        (spacelift-stack--parse-commit
+         (spacelift--alist-get 'commit blocker))))
+
+(defun spacelift-stack--blocker-map ()
+  "Return a hash of stack id to blocker run alist for all blocked stacks.
 Fetched in a single GraphQL call; stacks without a blocking run are
 omitted."
   (let ((data (spacelift--run-graphql
-               "{ stacks { id blocker { state } } }"))
+               (format "{ stacks { id blocker { %s } } }"
+                       spacelift-stack--blocker-fields)))
         (map (make-hash-table :test 'equal)))
     (dolist (stack (spacelift--alist-get 'stacks data))
       (let ((id (spacelift--alist-get 'id stack))
-            (state (spacelift--alist-get
-                    'state (spacelift--alist-get 'blocker stack))))
-        (when (and id state)
-          (puthash id state map))))
+            (blocker (spacelift--alist-get 'blocker stack)))
+        (when (and id blocker)
+          (puthash id blocker map))))
     map))
 
-(defun spacelift-stack--enrich-blocker-states (stacks)
-  "Populate the `blocker-state' of each blocked stack in STACKS, in place.
+(defun spacelift-stack--enrich-blockers (stacks)
+  "Populate the blocker slots of each blocked stack in STACKS, in place.
 When no stack in STACKS is blocked, no GraphQL call is made.  Return
 STACKS."
   (when (seq-some #'spacelift-stack-blocker-id stacks)
-    (let ((map (spacelift-stack--blocker-state-map)))
+    (let ((map (spacelift-stack--blocker-map)))
       (dolist (stack stacks)
         (when (spacelift-stack-blocker-id stack)
-          (setf (spacelift-stack-blocker-state stack)
-                (gethash (spacelift-stack-id stack) map))))))
+          (spacelift-stack--set-blocker
+           stack (gethash (spacelift-stack-id stack) map))))))
   stacks)
 
 (defun spacelift-stack-list (&optional search limit)
@@ -149,25 +179,25 @@ stacks are sorted case-insensitively by name."
       (setq args (append args (list "--limit" (number-to-string limit)))))
     (seq-sort-by (lambda (stack) (downcase (or (spacelift-stack-name stack) "")))
                  #'string-lessp
-                 (spacelift-stack--enrich-blocker-states
+                 (spacelift-stack--enrich-blockers
                   (mapcar #'spacelift-stack--parse
                           (apply #'spacelift--run-json args))))))
 
 (defun spacelift-stack-show (id)
   "Return the detailed `spacelift-stack' identified by ID.
-When the stack is blocked by a run, that run's state is fetched and
-promoted into `blocker-state'."
+When the stack is blocked by a run, that run's state, commit and branch
+are fetched and promoted into the stack."
   (let ((stack (spacelift-stack--parse
                 (spacelift--run-json "stack" "show" "--id" id))))
     (when (spacelift-stack-blocker-id stack)
       (let* ((data (spacelift--run-graphql
-                    "query($id: ID!) { stack(id: $id) { blocker { state } } }"
+                    (format
+                     "query($id: ID!) { stack(id: $id) { blocker { %s } } }"
+                     spacelift-stack--blocker-fields)
                     `((id . ,id))))
-             (state (spacelift--alist-get
-                     'state
-                     (spacelift--alist-get
-                      'blocker (spacelift--alist-get 'stack data)))))
-        (setf (spacelift-stack-blocker-state stack) state)))
+             (blocker (spacelift--alist-get
+                       'blocker (spacelift--alist-get 'stack data))))
+        (spacelift-stack--set-blocker stack blocker)))
     stack))
 
 (provide 'spacelift-stack)

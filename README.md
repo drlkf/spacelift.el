@@ -141,8 +141,8 @@ Stack line specifiers:
 | `%n` | stack name         |
 | `%i` | stack id (slug)    |
 | `%s` | current state (the blocking run's state when a run is blocking the stack, otherwise the stack's settled state) |
-| `%b` | tracked branch     |
-| `%a` | tracked commit author (falling back to login) |
+| `%b` | branch (the blocking run's branch when a run is blocking the stack, otherwise the tracked branch) |
+| `%a` | commit author (the blocking run's commit when a run is blocking the stack, otherwise the tracked commit; falling back to login) |
 | `%p` | worker pool name   |
 | `%r` | repository         |
 | `%S` | space name         |

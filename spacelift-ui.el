@@ -124,9 +124,12 @@ The following `format-spec' style specifiers are available:
   %i  stack id (slug)
   %s  current state (the blocking run's state when a run is blocking
       the stack, otherwise the stack's settled state)
-  %b  tracked branch
-  %a  tracked commit author (falling back to login)
-  %c  tracked short commit hash
+  %b  branch (the blocking run's branch when a run is blocking the
+      stack, otherwise the tracked branch)
+  %a  commit author (the blocking run's commit when a run is blocking
+      the stack, otherwise the tracked commit; falling back to login)
+  %c  short commit hash (the blocking run's commit when a run is
+      blocking the stack, otherwise the tracked commit)
   %p  worker pool name
   %r  repository
   %S  space name
@@ -235,13 +238,13 @@ Width and alignment flags (e.g. %-12s) are supported."
 
 (defun spacelift--stack-line (stack)
   "Render STACK into a single display line using `spacelift-stack-line-format'."
-  (let ((commit (spacelift-stack-tracked-commit stack)))
+  (let ((commit (spacelift-stack-display-commit stack)))
     (format-spec
      spacelift-stack-line-format
      `((?n . ,(or (spacelift-stack-name stack) ""))
        (?i . ,(or (spacelift-stack-id stack) ""))
        (?s . ,(spacelift--propertize-state (spacelift-stack-display-state stack)))
-       (?b . ,(or (spacelift-stack-branch stack) ""))
+       (?b . ,(or (spacelift-stack-display-branch stack) ""))
        (?a . ,(or (and commit (or (spacelift-commit-author commit)
                                   (spacelift-commit-login commit)))
                   ""))
@@ -722,10 +725,11 @@ When `spacectl' is not authenticated, offer to log in instead."
               string
               "\n"))))
 
-(defun spacelift--insert-commit (commit)
-  "Insert COMMIT details, when non-nil."
+(defun spacelift--insert-commit (commit &optional heading)
+  "Insert COMMIT details under HEADING, when non-nil.
+HEADING defaults to \"Tracked commit\"."
   (when commit
-    (spacelift--insert-heading "Tracked commit")
+    (spacelift--insert-heading (or heading "Tracked commit"))
     (spacelift--insert-field "Hash" (spacelift-commit-hash commit))
     (spacelift--insert-field "Author" (or (spacelift-commit-author commit)
                                           (spacelift-commit-login commit)))
@@ -764,7 +768,7 @@ When `spacectl' is not authenticated, offer to log in instead."
     (spacelift--insert-field "Provider" (spacelift-stack-provider stack))
     (spacelift--insert-field "Repository" (spacelift-stack-repository stack))
     (spacelift--insert-field "Namespace" (spacelift-stack-namespace stack))
-    (spacelift--insert-field "Branch" (spacelift-stack-branch stack))
+    (spacelift--insert-field "Branch" (spacelift-stack-display-branch stack))
     (spacelift--insert-field "Project root" (spacelift-stack-project-root stack))
     (insert "\n")
 
@@ -773,7 +777,11 @@ When `spacectl' is not authenticated, offer to log in instead."
       (insert "  " (spacelift--format-labels (spacelift-stack-labels stack))
               "\n\n"))
 
-    (spacelift--insert-commit (spacelift-stack-tracked-commit stack))
+    (spacelift--insert-commit
+     (spacelift-stack-display-commit stack)
+     (if (spacelift-stack-blocker-commit stack)
+         "Blocking run commit"
+       "Tracked commit"))
     (goto-char (point-min))))
 
 (defun spacelift-stack-refresh ()
