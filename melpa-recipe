@@ -1,4 +1,4 @@
 (spacelift
 :fetcher github
 :repo "drlkf/spacelift.el"
-:files ("spacelift.el" "spacelift-core.el" "spacelift-stack.el" "spacelift-run.el" "spacelift-ui.el"))
+:files ("spacelift.el" "spacelift-core.el" "spacelift-stack.el" "spacelift-run.el" "spacelift-worker.el" "spacelift-ui.el"))

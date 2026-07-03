@@ -24,10 +24,19 @@ prefix argument (`C-u`), you are prompted for a full-text search string.
 buffer directly.
 - `M-x spacelift-run-list-buffer` prompts for a stack id and opens a buffer
 listing that stack's runs.
+- `M-x spacelift-worker-pool-list-pools` opens a buffer listing your worker
+pools.
 
 In the stack list buffer, press `RET` on a stack to open its detail buffer, or
 `R` to open its run list. In a run list buffer, press `RET` on a run to open its
 detail buffer, or `l` to view its logs.
+
+In the worker pool list buffer, press `RET` on a pool to open its worker list,
+or `Q` to open its queue (the runs waiting to be scheduled on the pool). In a
+queue buffer, press `RET` on a queued run to open its detail buffer, or `l` to
+view its logs. `M-x spacelift-worker-pool-worker-list-buffer` and `M-x
+spacelift-worker-pool-queue-buffer` prompt for a pool id and open those buffers
+directly.
 
 Stack list and stack detail buffers:
 
@@ -69,6 +78,44 @@ Run log buffers:
 | `q`   | Stop the log process and quit the window |
 | `?`   | Show a magit-style popup of the available keys |
 
+Worker pool list buffer:
+
+| Key   | Action               |
+|-------|----------------------|
+| `r`   | Reload the buffer    |
+| `q`   | Quit the window      |
+| `?`   | Show a magit-style popup of the available keys |
+| `RET` | Open the pool's worker list |
+| `Q`   | Open the pool's queue |
+| `w`   | Browse the pool in the Spacelift console |
+| `y`   | Copy the pool's Spacelift console URL to the kill ring |
+| `j`/`k`, `n`/`p` | Move down/up |
+
+Worker list buffer:
+
+| Key   | Action               |
+|-------|----------------------|
+| `r`   | Reload the buffer    |
+| `q`   | Quit the window      |
+| `?`   | Show a magit-style popup of the available keys |
+| `Q`   | Open the pool's queue |
+| `w`   | Browse the pool in the Spacelift console |
+| `y`   | Copy the pool's Spacelift console URL to the kill ring |
+| `j`/`k`, `n`/`p` | Move down/up |
+
+Queue buffer:
+
+| Key   | Action               |
+|-------|----------------------|
+| `r`   | Reload the buffer    |
+| `q`   | Quit the window      |
+| `?`   | Show a magit-style popup of the available keys |
+| `RET` | Visit the queued run's detail buffer |
+| `l`   | View the queued run's logs (`C-u l` to follow/tail) |
+| `w`   | Browse the queued run URL in the Spacelift console |
+| `y`   | Copy the queued run's Spacelift console URL to the kill ring |
+| `j`/`k`, `n`/`p` | Move down/up |
+
 These bindings work both with vanilla Emacs and with `evil-mode`. When `evil`
 is loaded, the keys are bound in the `motion` and `normal` states so they are
 not shadowed by evil; navigation uses evil's own `j`/`k`. The `g` key is
@@ -84,6 +131,8 @@ before each command (uses the current profile when nil).
 - `spacelift-stack-line-format`: format string for a stack line.
 - `spacelift-run-line-format`: format string for a run line.
 - `spacelift-run-list-max-results`: default maximum number of runs fetched.
+- `spacelift-worker-queue-max-results`: default maximum number of queued runs
+fetched for a queue buffer.
 
 Stack line specifiers:
 
@@ -123,5 +172,7 @@ Width and alignment flags are supported, e.g. `%-30n`.
 console URL helpers.
 - `spacelift-stack.el`: stack structs and API functions.
 - `spacelift-run.el`: run structs and API functions.
+- `spacelift-worker.el`: worker pool, worker, and queue structs and API
+functions.
 - `spacelift-ui.el`: interactive buffers and major modes.
 - `spacelift.el`: top-level entry point.

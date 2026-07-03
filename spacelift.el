@@ -36,6 +36,7 @@
 ;; - `spacelift-run-list-buffer' opens a buffer listing a stack's runs.
 ;; - `spacelift-run-show-logs' opens a buffer streaming a run's logs.
 ;; - `spacelift-stack-show-latest-logs' streams a stack's latest run logs.
+;; - `spacelift-worker-pool-list-pools' lists your worker pools.
 ;;
 ;; See the README for setup instructions.
 
@@ -44,6 +45,7 @@
 (require 'spacelift-core)
 (require 'spacelift-stack)
 (require 'spacelift-run)
+(require 'spacelift-worker)
 (require 'spacelift-ui)
 
 (provide 'spacelift)

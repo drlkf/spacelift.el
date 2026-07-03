@@ -431,6 +431,10 @@ With REFRESH non-nil, query `spacectl' again and update the cache."
   "Return the Spacelift console URL for RUN-ID under stack STACK-ID."
   (format "%s/stack/%s/run/%s" (spacelift-endpoint) stack-id run-id))
 
+(defun spacelift-worker-pool-url (pool-id)
+  "Return the Spacelift console URL for the worker pool identified by POOL-ID."
+  (format "%s/worker-pool/%s" (spacelift-endpoint) pool-id))
+
 ;;; Generic helpers
 
 (defun spacelift--alist-get (key object &optional default)

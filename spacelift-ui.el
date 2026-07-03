@@ -25,10 +25,10 @@
 
 ;;; Commentary:
 
-;; Interactive buffers and major modes for browsing Spacelift stacks and
-;; their runs.
+;; Interactive buffers and major modes for browsing Spacelift stacks,
+;; their runs, and worker pools.
 ;;
-;; Five read-only buffers are provided:
+;; Read-only buffers are provided for stacks and runs:
 ;;
 ;; - The stack list buffer (`spacelift-stack-list-mode'), one line per
 ;;   stack, formatted according to `spacelift-stack-line-format'.  Press
@@ -48,6 +48,19 @@
 ;; - The run log buffer (`spacelift-run-log-mode'), streaming the logs of
 ;;   a run with ANSI colors, optionally tailing it.
 ;;
+;; And for worker pools:
+;;
+;; - The worker pool list buffer (`spacelift-worker-pool-list-mode'), one
+;;   line per pool.  Press RET for a pool's worker list, or `Q' for its
+;;   queue.
+;;
+;; - The worker list buffer (`spacelift-worker-list-mode'), one line per
+;;   worker registered to a pool.
+;;
+;; - The queue buffer (`spacelift-worker-queue-mode'), one line per run
+;;   waiting to be scheduled on a pool.  Press RET on a queued run to open
+;;   its detail buffer, or `l' to view its logs.
+;;
 ;; In every buffer, `r' reloads the contents and `q' quits the window.
 ;; `w' browses the Spacelift console URL of the stack or run at point, `y'
 ;; copies that URL to the kill ring, and `?' shows a magit-style transient
@@ -62,6 +75,7 @@
 (require 'spacelift-core)
 (require 'spacelift-stack)
 (require 'spacelift-run)
+(require 'spacelift-worker)
 
 ;;; Faces
 
@@ -152,6 +166,11 @@ Width and alignment flags (e.g. %-12s) are supported."
   :type 'integer
   :group 'spacelift)
 
+(defcustom spacelift-worker-queue-max-results 50
+  "Default maximum number of queued runs fetched for a queue buffer."
+  :type 'integer
+  :group 'spacelift)
+
 ;;; State
 
 (defvar-local spacelift--stack nil
@@ -175,6 +194,15 @@ Width and alignment flags (e.g. %-12s) are supported."
 (defvar-local spacelift--run-max-results nil
   "Maximum number of runs fetched for the current run list buffer.")
 
+(defvar-local spacelift--worker-pool-id nil
+  "Worker pool id whose workers or queue populate the current buffer.")
+
+(defvar-local spacelift--worker-pool-name nil
+  "Name of the worker pool populating the current worker or queue buffer.")
+
+(defvar-local spacelift--queue-max-results nil
+  "Maximum number of queued runs fetched for the current queue buffer.")
+
 ;;; Formatting helpers
 
 (defun spacelift--state-face (state)
@@ -183,9 +211,10 @@ Width and alignment flags (e.g. %-12s) are supported."
     ("FINISHED" 'spacelift-state-finished-face)
     ((or "FAILED" "STOPPED" "CANCELED" "DISCARDED") 'spacelift-state-failed-face)
     ((or "INITIALIZING" "PLANNING" "APPLYING" "PREPARING" "QUEUED"
-         "CONFIRMED" "UNCONFIRMED" "PENDING_REVIEW")
+         "CONFIRMED" "UNCONFIRMED" "PENDING_REVIEW" "BUSY")
      'spacelift-state-progress-face)
-    ("SKIPPED" 'spacelift-state-skipped-face)
+    ((or "SKIPPED" "DRAINED") 'spacelift-state-skipped-face)
+    ("IDLE" 'spacelift-state-finished-face)
     (_ 'default)))
 
 (defun spacelift--propertize-state (state)
@@ -243,6 +272,32 @@ Width and alignment flags (e.g. %-12s) are supported."
        (?d . ,(spacelift--format-unix-time (spacelift-run-created-at run)))
        (?T . ,(or (spacelift-run-triggered-by run) ""))
        (?D . ,(or (spacelift-run-delta run) ""))))))
+
+(defun spacelift--worker-pool-line (pool)
+  "Render POOL into a single display line for the worker pool list."
+  (format "%-30s  pending:%-4s  workers:%s/%-4s  queued:%s"
+          (or (spacelift-worker-pool-name pool) "")
+          (or (spacelift-worker-pool-pending-runs pool) 0)
+          (or (spacelift-worker-pool-busy-workers pool) 0)
+          (or (spacelift-worker-pool-registered-workers pool) 0)
+          (or (spacelift-worker-pool-schedulable-runs-count pool) 0)))
+
+(defun spacelift--worker-line (worker)
+  "Render WORKER into a single display line for the worker list."
+  (format "%-26s  %-12s  %-14s  %s"
+          (or (spacelift-worker-id worker) "")
+          (spacelift--propertize-state (spacelift-worker-status worker))
+          (spacelift--format-unix-time (spacelift-worker-created-at worker))
+          (or (spacelift-worker-metadata-value worker 'k8s-name) "")))
+
+(defun spacelift--queued-run-line (queued)
+  "Render QUEUED, a `spacelift-queued-run', into a single display line."
+  (let ((run (spacelift-queued-run-run queued)))
+    (format "%-4s  %-30s  %-17s  %s"
+            (or (spacelift-queued-run-position queued) "")
+            (or (spacelift-queued-run-stack-name queued) "")
+            (spacelift--propertize-state (spacelift-run-state run))
+            (or (spacelift-run-title run) ""))))
 
 ;;; URL helpers
 
@@ -337,6 +392,51 @@ Width and alignment flags (e.g. %-12s) are supported."
     ("q" "Quit window" spacelift-run-log-quit)
     ("?" "Close help" transient-quit-one)]])
 
+(transient-define-prefix spacelift-worker-pool-list-help ()
+  "Show the available keys in a Spacelift worker pool list buffer."
+  ["Spacelift worker pools"
+   ["Navigate"
+    ("RET" "List workers" spacelift-worker-pool-list-workers)
+    ("Q" "List queue" spacelift-worker-pool-list-queue)
+    ("j" "Next line" next-line :transient t)
+    ("k" "Previous line" previous-line :transient t)]
+   ["Act"
+    ("w" "Browse in console" spacelift-worker-pool-list-browse)
+    ("y" "Copy URL" spacelift-worker-pool-list-copy-url)
+    ("r" "Reload" spacelift-worker-pool-list-refresh)]
+   ["Window"
+    ("q" "Quit window" quit-window)
+    ("?" "Close help" transient-quit-one)]])
+
+(transient-define-prefix spacelift-worker-list-help ()
+  "Show the available keys in a Spacelift worker list buffer."
+  ["Spacelift workers"
+   ["Navigate"
+    ("Q" "List queue" spacelift-worker-list-queue)]
+   ["Act"
+    ("w" "Browse pool in console" spacelift-worker-list-browse)
+    ("y" "Copy pool URL" spacelift-worker-list-copy-url)
+    ("r" "Reload" spacelift-worker-list-refresh)]
+   ["Window"
+    ("q" "Quit window" quit-window)
+    ("?" "Close help" transient-quit-one)]])
+
+(transient-define-prefix spacelift-worker-queue-help ()
+  "Show the available keys in a Spacelift worker pool queue buffer."
+  ["Spacelift queue"
+   ["Navigate"
+    ("RET" "Visit run" spacelift-worker-queue-visit)
+    ("j" "Next line" next-line :transient t)
+    ("k" "Previous line" previous-line :transient t)]
+   ["Act"
+    ("l" "View run logs" spacelift-worker-queue-logs)
+    ("w" "Browse run URL" spacelift-worker-queue-browse)
+    ("y" "Copy run URL" spacelift-worker-queue-copy-url)
+    ("r" "Reload" spacelift-worker-queue-refresh)]
+   ["Window"
+    ("q" "Quit window" quit-window)
+    ("?" "Close help" transient-quit-one)]])
+
 (defun spacelift-help ()
   "Show a magit-style popup of the available keys for the current buffer."
   (interactive)
@@ -347,6 +447,10 @@ Width and alignment flags (e.g. %-12s) are supported."
     ((derived-mode-p 'spacelift-run-list-mode) #'spacelift-run-list-help)
     ((derived-mode-p 'spacelift-run-mode) #'spacelift-run-help)
     ((derived-mode-p 'spacelift-run-log-mode) #'spacelift-run-log-help)
+    ((derived-mode-p 'spacelift-worker-pool-list-mode)
+     #'spacelift-worker-pool-list-help)
+    ((derived-mode-p 'spacelift-worker-list-mode) #'spacelift-worker-list-help)
+    ((derived-mode-p 'spacelift-worker-queue-mode) #'spacelift-worker-queue-help)
     (t (user-error "Not in a Spacelift buffer")))))
 
 ;;; Stack list buffer
@@ -1187,6 +1291,341 @@ run detail buffer, or the run of the current log buffer."
     (spacelift-with-auth
       (spacelift-run-show-logs run tail))))
 
+;;; Worker pool list buffer
+
+(defvar spacelift-worker-pool-list-mode-map
+  (let ((map (make-sparse-keymap)))
+    (define-key map (kbd "RET") #'spacelift-worker-pool-list-workers)
+    (define-key map (kbd "Q") #'spacelift-worker-pool-list-queue)
+    (define-key map (kbd "w") #'spacelift-worker-pool-list-browse)
+    (define-key map (kbd "y") #'spacelift-worker-pool-list-copy-url)
+    (define-key map (kbd "r") #'spacelift-worker-pool-list-refresh)
+    (define-key map (kbd "g") #'spacelift-worker-pool-list-refresh)
+    (define-key map (kbd "q") #'quit-window)
+    (define-key map (kbd "?") #'spacelift-help)
+    (define-key map (kbd "n") #'next-line)
+    (define-key map (kbd "p") #'previous-line)
+    (define-key map (kbd "j") #'next-line)
+    (define-key map (kbd "k") #'previous-line)
+    map)
+  "Keymap for `spacelift-worker-pool-list-mode'.")
+
+(define-derived-mode spacelift-worker-pool-list-mode special-mode
+  "Spacelift-Pools"
+  "Major mode for listing Spacelift worker pools.
+
+\\{spacelift-worker-pool-list-mode-map}"
+  (setq-local truncate-lines t)
+  (hl-line-mode 1))
+
+(defcustom spacelift-worker-pool-list-buffer-name "*spacelift-worker-pools*"
+  "Name of the buffer used to list worker pools."
+  :type 'string
+  :group 'spacelift)
+
+(defun spacelift--insert-worker-pool-list (pools)
+  "Insert POOLS into the current buffer, one per line."
+  (let ((inhibit-read-only t))
+    (erase-buffer)
+    (if (null pools)
+        (insert (propertize "No worker pools found.\n" 'face 'shadow))
+      (dolist (pool pools)
+        (insert (propertize (spacelift--worker-pool-line pool)
+                            'spacelift-worker-pool pool)
+                "\n")))
+    (goto-char (point-min))))
+
+(defun spacelift-worker-pool-list-pool-at-point ()
+  "Return the `spacelift-worker-pool' on the current line, or nil."
+  (get-text-property (line-beginning-position) 'spacelift-worker-pool))
+
+(defun spacelift-worker-pool-list-refresh ()
+  "Reload the worker pools shown in the current buffer."
+  (interactive)
+  (unless (derived-mode-p 'spacelift-worker-pool-list-mode)
+    (user-error "Not in a Spacelift worker pool list buffer"))
+  (spacelift-with-auth
+    (let ((pools (spacelift-worker-pool-list))
+          (line (line-number-at-pos)))
+      (spacelift--insert-worker-pool-list pools)
+      (forward-line (1- line))
+      (message "Loaded %d worker pool(s)" (length pools)))))
+
+(defun spacelift-worker-pool-list-workers ()
+  "Open the worker list buffer for the pool on the current line."
+  (interactive)
+  (let ((pool (spacelift-worker-pool-list-pool-at-point)))
+    (unless pool
+      (user-error "No worker pool on this line"))
+    (spacelift-worker-pool-worker-list-buffer
+     (spacelift-worker-pool-id pool)
+     (spacelift-worker-pool-name pool))))
+
+(defun spacelift-worker-pool-list-queue ()
+  "Open the queue buffer for the pool on the current line."
+  (interactive)
+  (let ((pool (spacelift-worker-pool-list-pool-at-point)))
+    (unless pool
+      (user-error "No worker pool on this line"))
+    (spacelift-worker-pool-queue-buffer
+     (spacelift-worker-pool-id pool)
+     nil
+     (spacelift-worker-pool-name pool))))
+
+(defun spacelift-worker-pool-list-browse ()
+  "Open the Spacelift console page for the pool on the current line."
+  (interactive)
+  (let ((pool (spacelift-worker-pool-list-pool-at-point)))
+    (unless pool
+      (user-error "No worker pool on this line"))
+    (spacelift-with-auth
+      (browse-url (spacelift-worker-pool-url (spacelift-worker-pool-id pool))))))
+
+(defun spacelift-worker-pool-list-copy-url ()
+  "Copy the Spacelift console URL of the pool on the current line."
+  (interactive)
+  (let ((pool (spacelift-worker-pool-list-pool-at-point)))
+    (unless pool
+      (user-error "No worker pool on this line"))
+    (spacelift-with-auth
+      (spacelift--copy-url
+       (spacelift-worker-pool-url (spacelift-worker-pool-id pool))))))
+
+;;;###autoload
+(defun spacelift-worker-pool-list-pools ()
+  "Display the list of Spacelift worker pools in a dedicated buffer.
+
+When `spacectl' is not authenticated, offer to log in instead."
+  (interactive)
+  (spacelift-with-auth
+    (let ((buffer (get-buffer-create spacelift-worker-pool-list-buffer-name)))
+      (with-current-buffer buffer
+        (spacelift-worker-pool-list-mode)
+        (spacelift--insert-worker-pool-list (spacelift-worker-pool-list)))
+      (pop-to-buffer buffer))))
+
+;;; Worker list buffer
+
+(defvar spacelift-worker-list-mode-map
+  (let ((map (make-sparse-keymap)))
+    (define-key map (kbd "Q") #'spacelift-worker-list-queue)
+    (define-key map (kbd "w") #'spacelift-worker-list-browse)
+    (define-key map (kbd "y") #'spacelift-worker-list-copy-url)
+    (define-key map (kbd "r") #'spacelift-worker-list-refresh)
+    (define-key map (kbd "g") #'spacelift-worker-list-refresh)
+    (define-key map (kbd "q") #'quit-window)
+    (define-key map (kbd "?") #'spacelift-help)
+    (define-key map (kbd "n") #'next-line)
+    (define-key map (kbd "p") #'previous-line)
+    (define-key map (kbd "j") #'next-line)
+    (define-key map (kbd "k") #'previous-line)
+    map)
+  "Keymap for `spacelift-worker-list-mode'.")
+
+(define-derived-mode spacelift-worker-list-mode special-mode "Spacelift-Workers"
+  "Major mode for listing the workers of a Spacelift worker pool.
+
+\\{spacelift-worker-list-mode-map}"
+  (setq-local truncate-lines t)
+  (hl-line-mode 1))
+
+(defun spacelift--worker-list-buffer-name (pool-id)
+  "Return the worker list buffer name for POOL-ID."
+  (format "*spacelift-workers: %s*" pool-id))
+
+(defun spacelift--insert-worker-list (workers)
+  "Insert WORKERS into the current buffer, one per line."
+  (let ((inhibit-read-only t))
+    (erase-buffer)
+    (if (null workers)
+        (insert (propertize "No workers registered.\n" 'face 'shadow))
+      (dolist (worker workers)
+        (insert (propertize (spacelift--worker-line worker)
+                            'spacelift-worker worker)
+                "\n")))
+    (goto-char (point-min))))
+
+(defun spacelift-worker-list-refresh ()
+  "Reload the workers shown in the current buffer."
+  (interactive)
+  (unless (and (derived-mode-p 'spacelift-worker-list-mode)
+               spacelift--worker-pool-id)
+    (user-error "Not in a Spacelift worker list buffer"))
+  (spacelift-with-auth
+    (let ((workers (spacelift-worker-pool-worker-list spacelift--worker-pool-id))
+          (line (line-number-at-pos)))
+      (spacelift--insert-worker-list workers)
+      (forward-line (1- line))
+      (message "Loaded %d worker(s)" (length workers)))))
+
+(defun spacelift-worker-list-queue ()
+  "Open the queue buffer for the pool of the current worker list buffer."
+  (interactive)
+  (unless (and (derived-mode-p 'spacelift-worker-list-mode)
+               spacelift--worker-pool-id)
+    (user-error "Not in a Spacelift worker list buffer"))
+  (spacelift-worker-pool-queue-buffer spacelift--worker-pool-id nil
+                                      spacelift--worker-pool-name))
+
+(defun spacelift-worker-list-browse ()
+  "Open the Spacelift console page for the current worker list's pool."
+  (interactive)
+  (unless (and (derived-mode-p 'spacelift-worker-list-mode)
+               spacelift--worker-pool-id)
+    (user-error "Not in a Spacelift worker list buffer"))
+  (spacelift-with-auth
+    (browse-url (spacelift-worker-pool-url spacelift--worker-pool-id))))
+
+(defun spacelift-worker-list-copy-url ()
+  "Copy the Spacelift console URL of the current worker list's pool."
+  (interactive)
+  (unless (and (derived-mode-p 'spacelift-worker-list-mode)
+               spacelift--worker-pool-id)
+    (user-error "Not in a Spacelift worker list buffer"))
+  (spacelift-with-auth
+    (spacelift--copy-url
+     (spacelift-worker-pool-url spacelift--worker-pool-id))))
+
+;;;###autoload
+(defun spacelift-worker-pool-worker-list-buffer (pool-id &optional pool-name)
+  "Display the workers of the pool identified by POOL-ID in a buffer.
+POOL-NAME, when non-nil, labels the pool in messages.
+
+When `spacectl' is not authenticated, offer to log in instead."
+  (interactive "sWorker pool id: ")
+  (spacelift-with-auth
+    (let ((workers (spacelift-worker-pool-worker-list pool-id))
+          (buffer (get-buffer-create
+                   (spacelift--worker-list-buffer-name pool-id))))
+      (with-current-buffer buffer
+        (spacelift-worker-list-mode)
+        (setq spacelift--worker-pool-id pool-id
+              spacelift--worker-pool-name pool-name)
+        (spacelift--insert-worker-list workers))
+      (pop-to-buffer buffer))))
+
+;;; Worker pool queue buffer
+
+(defvar spacelift-worker-queue-mode-map
+  (let ((map (make-sparse-keymap)))
+    (define-key map (kbd "RET") #'spacelift-worker-queue-visit)
+    (define-key map (kbd "l") #'spacelift-worker-queue-logs)
+    (define-key map (kbd "w") #'spacelift-worker-queue-browse)
+    (define-key map (kbd "y") #'spacelift-worker-queue-copy-url)
+    (define-key map (kbd "r") #'spacelift-worker-queue-refresh)
+    (define-key map (kbd "g") #'spacelift-worker-queue-refresh)
+    (define-key map (kbd "q") #'quit-window)
+    (define-key map (kbd "?") #'spacelift-help)
+    (define-key map (kbd "n") #'next-line)
+    (define-key map (kbd "p") #'previous-line)
+    (define-key map (kbd "j") #'next-line)
+    (define-key map (kbd "k") #'previous-line)
+    map)
+  "Keymap for `spacelift-worker-queue-mode'.")
+
+(define-derived-mode spacelift-worker-queue-mode special-mode "Spacelift-Queue"
+  "Major mode for showing the queue of a Spacelift worker pool.
+
+\\{spacelift-worker-queue-mode-map}"
+  (setq-local truncate-lines t)
+  (hl-line-mode 1))
+
+(defun spacelift--worker-queue-buffer-name (pool-id)
+  "Return the queue buffer name for POOL-ID."
+  (format "*spacelift-queue: %s*" pool-id))
+
+(defun spacelift--insert-worker-queue (queued-runs)
+  "Insert QUEUED-RUNS into the current buffer, one per line."
+  (let ((inhibit-read-only t))
+    (erase-buffer)
+    (if (null queued-runs)
+        (insert (propertize "Queue is empty.\n" 'face 'shadow))
+      (dolist (queued queued-runs)
+        (insert (propertize (spacelift--queued-run-line queued)
+                            'spacelift-queued-run queued)
+                "\n")))
+    (goto-char (point-min))))
+
+(defun spacelift-worker-queue-run-at-point ()
+  "Return the `spacelift-run' of the queued run on the current line, or nil."
+  (let ((queued (get-text-property (line-beginning-position)
+                                   'spacelift-queued-run)))
+    (and queued (spacelift-queued-run-run queued))))
+
+(defun spacelift-worker-queue-refresh ()
+  "Reload the queue shown in the current buffer."
+  (interactive)
+  (unless (and (derived-mode-p 'spacelift-worker-queue-mode)
+               spacelift--worker-pool-id)
+    (user-error "Not in a Spacelift queue buffer"))
+  (spacelift-with-auth
+    (let ((queue (spacelift-worker-pool-queue spacelift--worker-pool-id
+                                              spacelift--queue-max-results))
+          (line (line-number-at-pos)))
+      (spacelift--insert-worker-queue queue)
+      (forward-line (1- line))
+      (message "Loaded %d queued run(s)" (length queue)))))
+
+(defun spacelift-worker-queue-visit ()
+  "Open the detail buffer for the run of the queued run on the current line."
+  (interactive)
+  (let ((run (spacelift-worker-queue-run-at-point)))
+    (unless run
+      (user-error "No queued run on this line"))
+    (spacelift-run-show-buffer run)))
+
+(defun spacelift-worker-queue-logs (&optional tail)
+  "View the logs of the queued run on the current line.
+With a prefix argument TAIL, follow the run as it progresses."
+  (interactive "P")
+  (let ((run (spacelift-worker-queue-run-at-point)))
+    (unless run
+      (user-error "No queued run on this line"))
+    (spacelift-with-auth
+      (spacelift-run-show-logs run tail))))
+
+(defun spacelift-worker-queue-browse ()
+  "Browse the Spacelift console URL of the queued run on the current line."
+  (interactive)
+  (let ((run (spacelift-worker-queue-run-at-point)))
+    (unless run
+      (user-error "No queued run on this line"))
+    (spacelift-with-auth
+      (let ((url (spacelift-run-browse-url run)))
+        (browse-url url)
+        (message "Browsing %s" url)))))
+
+(defun spacelift-worker-queue-copy-url ()
+  "Copy the Spacelift console URL of the queued run on the current line."
+  (interactive)
+  (let ((run (spacelift-worker-queue-run-at-point)))
+    (unless run
+      (user-error "No queued run on this line"))
+    (spacelift-with-auth
+      (spacelift--copy-url (spacelift-run-browse-url run)))))
+
+;;;###autoload
+(defun spacelift-worker-pool-queue-buffer (pool-id &optional max-results pool-name)
+  "Display the queue of the pool identified by POOL-ID in a buffer.
+MAX-RESULTS caps the number of queued runs fetched, defaulting to
+`spacelift-worker-queue-max-results'.  POOL-NAME, when non-nil, labels
+the pool in messages.
+
+When `spacectl' is not authenticated, offer to log in instead."
+  (interactive "sWorker pool id: ")
+  (let ((max-results (or max-results spacelift-worker-queue-max-results)))
+    (spacelift-with-auth
+      (let ((queue (spacelift-worker-pool-queue pool-id max-results))
+            (buffer (get-buffer-create
+                     (spacelift--worker-queue-buffer-name pool-id))))
+        (with-current-buffer buffer
+          (spacelift-worker-queue-mode)
+          (setq spacelift--worker-pool-id pool-id
+                spacelift--worker-pool-name pool-name
+                spacelift--queue-max-results max-results)
+          (spacelift--insert-worker-queue queue))
+        (pop-to-buffer buffer)))))
+
 ;;; Evil integration for run buffers
 
 (defun spacelift--setup-run-evil-bindings ()
@@ -1227,12 +1666,35 @@ run detail buffer, or the run of the current log buffer."
       "t" #'spacelift-stack-list-retry
       "f" #'spacelift-stack-list-toggle-unsuccessful)
     (evil-define-key* '(motion normal) spacelift-stack-mode-map
-      "L" #'spacelift-stack-runs
+      "R" #'spacelift-stack-runs
       "w" #'spacelift-stack-browse
       "y" #'spacelift-stack-copy-url
       "l" #'spacelift-stack-latest-logs
       "c" #'spacelift-stack-confirm
-      "t" #'spacelift-stack-retry)))
+      "t" #'spacelift-stack-retry)
+    (evil-define-key* '(motion normal) spacelift-worker-pool-list-mode-map
+      (kbd "RET") #'spacelift-worker-pool-list-workers
+      "Q" #'spacelift-worker-pool-list-queue
+      "w" #'spacelift-worker-pool-list-browse
+      "y" #'spacelift-worker-pool-list-copy-url
+      "r" #'spacelift-worker-pool-list-refresh
+      "q" #'quit-window
+      "?" #'spacelift-help)
+    (evil-define-key* '(motion normal) spacelift-worker-list-mode-map
+      "Q" #'spacelift-worker-list-queue
+      "w" #'spacelift-worker-list-browse
+      "y" #'spacelift-worker-list-copy-url
+      "r" #'spacelift-worker-list-refresh
+      "q" #'quit-window
+      "?" #'spacelift-help)
+    (evil-define-key* '(motion normal) spacelift-worker-queue-mode-map
+      (kbd "RET") #'spacelift-worker-queue-visit
+      "l" #'spacelift-worker-queue-logs
+      "w" #'spacelift-worker-queue-browse
+      "y" #'spacelift-worker-queue-copy-url
+      "r" #'spacelift-worker-queue-refresh
+      "q" #'quit-window
+      "?" #'spacelift-help)))
 
 (with-eval-after-load 'evil
   (spacelift--setup-run-evil-bindings))
