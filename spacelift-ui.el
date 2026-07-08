@@ -397,7 +397,7 @@ Width and alignment flags (e.g. %-12s) are supported."
     ("w" "Browse in console" spacelift-run-log-browse)
     ("y" "Copy URL" spacelift-run-log-copy-url)
     ("r" "Reload logs" spacelift-run-log-refresh)
-    ("G" "Toggle tailing" spacelift-run-log-tail)]
+    ("F" "Toggle tailing" spacelift-run-log-tail)]
    ["Window"
     ("q" "Quit window" spacelift-run-log-quit)
     ("?" "Close help" transient-quit-one)]])

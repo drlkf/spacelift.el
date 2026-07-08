@@ -74,7 +74,7 @@ Run log buffers:
 | Key   | Action               |
 |-------|----------------------|
 | `r`   | Reload the logs      |
-| `G`   | Toggle following (tailing) the run |
+| `F`   | Toggle following (tailing) the run |
 | `W`   | Open the worker pool list |
 | `w`   | Browse the run URL in the Spacelift console |
 | `y`   | Copy the run/stack Spacelift console URL to the kill ring |
