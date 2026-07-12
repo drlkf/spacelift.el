@@ -327,9 +327,9 @@ Width and alignment flags (e.g. %-12s) are supported."
    ["Act"
     ("w" "Browse in console" spacelift-stack-list-browse)
     ("y" "Copy URL" spacelift-stack-list-copy-url)
-    ("l" "View latest logs" spacelift-stack-list-latest-logs)
-    ("c" "Confirm latest run" spacelift-stack-list-confirm)
-    ("t" "Retry latest run" spacelift-stack-list-retry)
+    ("l" "View current run logs" spacelift-stack-list-latest-logs)
+    ("c" "Confirm current run" spacelift-stack-list-confirm)
+    ("t" "Retry current run" spacelift-stack-list-retry)
     ("f" "Toggle non-successful only" spacelift-stack-list-toggle-unsuccessful)
     ("r" "Reload" spacelift-stack-list-refresh)]
    ["Window"
@@ -345,9 +345,9 @@ Width and alignment flags (e.g. %-12s) are supported."
    ["Act"
     ("w" "Browse in console" spacelift-stack-browse)
     ("y" "Copy URL" spacelift-stack-copy-url)
-    ("l" "View latest logs" spacelift-stack-latest-logs)
-    ("c" "Confirm latest run" spacelift-stack-confirm)
-    ("t" "Retry latest run" spacelift-stack-retry)
+    ("l" "View current run logs" spacelift-stack-latest-logs)
+    ("c" "Confirm current run" spacelift-stack-confirm)
+    ("t" "Retry current run" spacelift-stack-retry)
     ("r" "Reload" spacelift-stack-refresh)]
    ["Window"
     ("q" "Quit window" quit-window)
@@ -581,29 +581,41 @@ Non-successful stacks are those whose displayed state is not FINISHED."
       (spacelift--copy-url (spacelift-stack-url (spacelift-stack-id stack))))))
 
 (defun spacelift-stack-list-latest-logs (&optional tail)
-  "View the latest run logs of the stack on the current line.
-With a prefix argument TAIL, follow the run as it progresses."
+  "View the current run logs of the stack on the current line.
+The current run is the blocking run when the stack is blocked, otherwise
+its latest run.  With a prefix argument TAIL, follow the run as it
+progresses."
   (interactive "P")
   (let ((stack (spacelift-stack-list-stack-at-point)))
     (unless stack
       (user-error "No stack on this line"))
     (spacelift-with-auth
-      (spacelift-stack-show-latest-logs (spacelift-stack-id stack) tail))))
+      (spacelift-stack--show-current-logs stack tail))))
 
-(defun spacelift--confirm-stack-latest-run (stack-id)
-  "Confirm the latest run of STACK-ID when it is awaiting confirmation.
-The latest run is the displayed run of the stack; it must be in the
+(defun spacelift-stack--show-current-logs (stack tail)
+  "View the logs of STACK's current run, following when TAIL is non-nil.
+When STACK is blocked, stream the blocking run's logs; otherwise use the
+faster `--run-latest' path."
+  (if (spacelift-stack-blocker-id stack)
+      (spacelift-run-show-logs (spacelift-stack-current-run stack) tail)
+    (spacelift-stack-show-latest-logs (spacelift-stack-id stack) tail)))
+
+(defun spacelift--confirm-stack-current-run (stack)
+  "Confirm STACK's current run when it is awaiting confirmation.
+The current run is the run displayed on the stack line: the blocking run
+when STACK is blocked, otherwise its latest run.  It must be in the
 UNCONFIRMED state.  Confirming is a write operation, so it asks for
 confirmation first.  Return non-nil when a run was confirmed."
   (spacelift-with-auth
-    (let ((run (car (spacelift-stack-run-list stack-id 1))))
+    (let ((run (spacelift-stack-current-run stack))
+          (stack-id (spacelift-stack-id stack)))
       (unless run
         (user-error "Stack %s has no runs" stack-id))
       (let ((state (spacelift-run-state run))
             (id (spacelift-run-id run)))
         (unless (equal state "UNCONFIRMED")
           (user-error
-           "Latest run %s of stack %s is not awaiting confirmation (state: %s)"
+           "Run %s of stack %s is not awaiting confirmation (state: %s)"
            id stack-id (or state "unknown")))
         (when (yes-or-no-p (format "Confirm run %s of stack %s? " id stack-id))
           (spacelift-run-confirm run)
@@ -611,21 +623,23 @@ confirmation first.  Return non-nil when a run was confirmed."
           t)))))
 
 (defun spacelift-stack-list-confirm ()
-  "Confirm the latest run of the stack on the current line."
+  "Confirm the current run of the stack on the current line."
   (interactive)
   (let ((stack (spacelift-stack-list-stack-at-point)))
     (unless stack
       (user-error "No stack on this line"))
-    (when (spacelift--confirm-stack-latest-run (spacelift-stack-id stack))
+    (when (spacelift--confirm-stack-current-run stack)
       (spacelift-stack-list-refresh))))
 
-(defun spacelift--retry-stack-latest-run (stack-id)
-  "Retry the latest run of STACK-ID.
-The latest run is the displayed run of the stack.  Retrying is a write
+(defun spacelift--retry-stack-current-run (stack)
+  "Retry STACK's current run.
+The current run is the run displayed on the stack line: the blocking run
+when STACK is blocked, otherwise its latest run.  Retrying is a write
 operation, so it asks for confirmation first.  Return non-nil when a run
 was retried."
   (spacelift-with-auth
-    (let ((run (car (spacelift-stack-run-list stack-id 1))))
+    (let ((run (spacelift-stack-current-run stack))
+          (stack-id (spacelift-stack-id stack)))
       (unless run
         (user-error "Stack %s has no runs" stack-id))
       (let ((id (spacelift-run-id run)))
@@ -635,12 +649,12 @@ was retried."
           t)))))
 
 (defun spacelift-stack-list-retry ()
-  "Retry the latest run of the stack on the current line."
+  "Retry the current run of the stack on the current line."
   (interactive)
   (let ((stack (spacelift-stack-list-stack-at-point)))
     (unless stack
       (user-error "No stack on this line"))
-    (when (spacelift--retry-stack-latest-run (spacelift-stack-id stack))
+    (when (spacelift--retry-stack-current-run stack)
       (spacelift-stack-list-refresh))))
 
 ;;;###autoload
@@ -831,31 +845,30 @@ HEADING defaults to \"Tracked commit\"."
      (spacelift-stack-url (spacelift-stack-id spacelift--stack)))))
 
 (defun spacelift-stack-latest-logs (&optional tail)
-  "View the latest run logs of the stack in the current detail buffer.
-With a prefix argument TAIL, follow the run as it progresses."
+  "View the current run logs of the stack in the current detail buffer.
+The current run is the blocking run when the stack is blocked, otherwise
+its latest run.  With a prefix argument TAIL, follow the run as it
+progresses."
   (interactive "P")
   (unless (and (derived-mode-p 'spacelift-stack-mode) spacelift--stack)
     (user-error "Not in a Spacelift stack buffer"))
   (spacelift-with-auth
-    (spacelift-stack-show-latest-logs (spacelift-stack-id spacelift--stack)
-                                      tail)))
+    (spacelift-stack--show-current-logs spacelift--stack tail)))
 
 (defun spacelift-stack-confirm ()
-  "Confirm the latest run of the stack in the current detail buffer."
+  "Confirm the current run of the stack in the current detail buffer."
   (interactive)
   (unless (and (derived-mode-p 'spacelift-stack-mode) spacelift--stack)
     (user-error "Not in a Spacelift stack buffer"))
-  (when (spacelift--confirm-stack-latest-run
-         (spacelift-stack-id spacelift--stack))
+  (when (spacelift--confirm-stack-current-run spacelift--stack)
     (spacelift-stack-refresh)))
 
 (defun spacelift-stack-retry ()
-  "Retry the latest run of the stack in the current detail buffer."
+  "Retry the current run of the stack in the current detail buffer."
   (interactive)
   (unless (and (derived-mode-p 'spacelift-stack-mode) spacelift--stack)
     (user-error "Not in a Spacelift stack buffer"))
-  (when (spacelift--retry-stack-latest-run
-         (spacelift-stack-id spacelift--stack))
+  (when (spacelift--retry-stack-current-run spacelift--stack)
     (spacelift-stack-refresh)))
 
 ;;;###autoload

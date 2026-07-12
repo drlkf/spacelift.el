@@ -50,8 +50,8 @@ Stack list and stack detail buffers:
 | `W`   | Open the worker pool list |
 | `w`   | Browse the stack in the Spacelift console |
 | `y`   | Copy the stack's Spacelift console URL to the kill ring |
-| `l`   | View the stack's latest run logs (`C-u l` to follow/tail) |
-| `c`   | Confirm the stack's latest run if unconfirmed (asks first) |
+| `l`   | View the stack's current run logs (blocking run when blocked, else latest; `C-u l` to follow/tail) |
+| `c`   | Confirm the stack's current run if unconfirmed (blocking run when blocked, else latest; asks first) |
 | `j`/`k`, `n`/`p` | Move down/up (list buffer) |
 
 Run list and run detail buffers:

@@ -76,6 +76,26 @@ console URL can be built.  Slot RAW holds the original parsed alist."
 
 ;;; API
 
+(defun spacelift-stack-current-run (stack)
+  "Return the run to act on for STACK: its blocking run when blocked.
+When STACK is blocked by a run, a lightweight `spacelift-run' is built
+from the stack's blocker slots, avoiding a fetch; otherwise the stack's
+most recent run is fetched.  This is the run displayed on the stack
+line, so acting on it matches what the user sees.
+
+The blocked run's slots are a snapshot from when STACK was last
+loaded, not a live fetch: its state may be stale (a write acting on
+it is validated server-side by `spacectl'), and the state is nil when
+the blocking run's details were unavailable at load time."
+  (if (spacelift-stack-blocker-id stack)
+      (spacelift-run-create
+       :id (spacelift-stack-blocker-id stack)
+       :stack-id (spacelift-stack-id stack)
+       :state (spacelift-stack-blocker-state stack)
+       :branch (spacelift-stack-blocker-branch stack)
+       :commit (spacelift-stack-blocker-commit stack))
+    (car (spacelift-stack-run-list (spacelift-stack-id stack) 1))))
+
 (defun spacelift-stack-run-list (stack-id &optional max-results preview)
   "Return a list of `spacelift-run' for the stack identified by STACK-ID.
 MAX-RESULTS, when non-nil, caps the number of runs returned.  When
