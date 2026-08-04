@@ -367,6 +367,7 @@ Width and alignment flags (e.g. %-12s) are supported."
     ("l" "View logs" spacelift-run-logs)
     ("c" "Confirm run" spacelift-run-confirm-at-point)
     ("t" "Retry run" spacelift-run-retry-at-point)
+    ("P" "Prioritize run" spacelift-run-prioritize-at-point)
     ("r" "Reload" spacelift-run-list-refresh)]
    ["Window"
     ("q" "Quit window" quit-window)
@@ -383,6 +384,7 @@ Width and alignment flags (e.g. %-12s) are supported."
     ("l" "View logs" spacelift-run-logs)
     ("c" "Confirm run" spacelift-run-confirm-at-point)
     ("t" "Retry run" spacelift-run-retry-at-point)
+    ("P" "Prioritize run" spacelift-run-prioritize-at-point)
     ("r" "Reload" spacelift-run-refresh)]
    ["Window"
     ("q" "Quit window" quit-window)
@@ -897,6 +899,7 @@ When `spacectl' is not authenticated, offer to log in instead."
     (define-key map (kbd "l") #'spacelift-run-logs)
     (define-key map (kbd "c") #'spacelift-run-confirm-at-point)
     (define-key map (kbd "t") #'spacelift-run-retry-at-point)
+    (define-key map (kbd "P") #'spacelift-run-prioritize-at-point)
     (define-key map (kbd "r") #'spacelift-run-list-refresh)
     (define-key map (kbd "g") #'spacelift-run-list-refresh)
     (define-key map (kbd "q") #'quit-window)
@@ -986,6 +989,7 @@ When `spacectl' is not authenticated, offer to log in instead."
     (define-key map (kbd "l") #'spacelift-run-logs)
     (define-key map (kbd "c") #'spacelift-run-confirm-at-point)
     (define-key map (kbd "t") #'spacelift-run-retry-at-point)
+    (define-key map (kbd "P") #'spacelift-run-prioritize-at-point)
     (define-key map (kbd "r") #'spacelift-run-refresh)
     (define-key map (kbd "g") #'spacelift-run-refresh)
     (define-key map (kbd "q") #'quit-window)
@@ -1133,6 +1137,26 @@ confirmation first."
         (spacelift-with-auth
           (spacelift-run-retry run)
           (message "Retried run %s" id)
+          (cond
+           ((derived-mode-p 'spacelift-run-list-mode)
+            (spacelift-run-list-refresh))
+           ((derived-mode-p 'spacelift-run-mode)
+            (spacelift-run-refresh))))))))
+
+(defun spacelift-run-prioritize-at-point (&optional deprioritize)
+  "Prioritize the run at point or in the current buffer.
+With a prefix argument DEPRIORITIZE the run instead.  This is a write
+operation, so it asks for confirmation first."
+  (interactive "P")
+  (let ((run (spacelift--run-at-point-or-current)))
+    (unless run
+      (user-error "No run at point or in the current buffer"))
+    (let ((id (spacelift-run-id run))
+          (action (if deprioritize "Deprioritize" "Prioritize")))
+      (when (yes-or-no-p (format "%s run %s? " action id))
+        (spacelift-with-auth
+          (spacelift-run-prioritize run deprioritize)
+          (message "%sd run %s" action id)
           (cond
            ((derived-mode-p 'spacelift-run-list-mode)
             (spacelift-run-list-refresh))
@@ -1673,6 +1697,7 @@ When `spacectl' is not authenticated, offer to log in instead."
       "l" #'spacelift-run-logs
       "c" #'spacelift-run-confirm-at-point
       "t" #'spacelift-run-retry-at-point
+      "P" #'spacelift-run-prioritize-at-point
       "r" #'spacelift-run-list-refresh
       "q" #'quit-window
       "?" #'spacelift-help)
@@ -1682,6 +1707,7 @@ When `spacectl' is not authenticated, offer to log in instead."
       "l" #'spacelift-run-logs
       "c" #'spacelift-run-confirm-at-point
       "t" #'spacelift-run-retry-at-point
+      "P" #'spacelift-run-prioritize-at-point
       "r" #'spacelift-run-refresh
       "q" #'quit-window
       "?" #'spacelift-help)

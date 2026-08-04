@@ -128,6 +128,14 @@ Return `spacectl''s raw output.  This is a write operation."
                "--id" (spacelift-run-stack-id run)
                "--run" (spacelift-run-id run))))
 
+(defun spacelift-run-prioritize (run &optional deprioritize)
+  "Prioritize RUN, or deprioritize it when DEPRIORITIZE is non-nil.
+Return `spacectl''s raw output.  This is a write operation."
+  (apply #'spacelift--run
+         (list "stack" (if deprioritize "deprioritize" "prioritize")
+               "--id" (spacelift-run-stack-id run)
+               "--run" (spacelift-run-id run))))
+
 (defun spacelift--run-logs-process (stack-id run-id buffer tail phase)
   "Stream logs into BUFFER for STACK-ID, returning the process.
 When RUN-ID is non-nil, stream that run's logs; otherwise stream the
