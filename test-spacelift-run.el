@@ -1,5 +1,6 @@
 (require 'ert)
 (require 'spacelift-run)
+(require 'spacelift-ui)
 
 (ert-deftest spacelift-run-prioritize-uses-the-requested-action ()
   (let ((run (spacelift-run-create :id "run-1" :stack-id "stack-1"))
@@ -12,3 +13,16 @@
       (spacelift-run-prioritize run t)
       (should (equal command '("stack" "deprioritize" "--id" "stack-1"
                                "--run" "run-1"))))))
+
+(ert-deftest spacelift-run-log-retry-retries-the-buffer-run ()
+  (let ((run (spacelift-run-create :id "run-1" :stack-id "stack-1"))
+        retried)
+    (with-temp-buffer
+      (spacelift-run-log-mode)
+      (setq spacelift--log-stack-id "stack-1"
+            spacelift--log-run run)
+      (cl-letf (((symbol-function 'yes-or-no-p) (lambda (&rest _) t))
+                ((symbol-function 'spacelift-run-retry)
+                 (lambda (value) (setq retried value))))
+        (spacelift-run-log-retry)
+        (should (eq retried run))))))

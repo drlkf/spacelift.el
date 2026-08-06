@@ -398,6 +398,7 @@ Width and alignment flags (e.g. %-12s) are supported."
    ["Act"
     ("w" "Browse in console" spacelift-run-log-browse)
     ("y" "Copy URL" spacelift-run-log-copy-url)
+    ("t" "Retry run" spacelift-run-log-retry)
     ("r" "Reload logs" spacelift-run-log-refresh)
     ("F" "Toggle tailing" spacelift-run-log-tail)]
    ["Window"
@@ -1180,6 +1181,7 @@ Nil when the buffer streams the stack's latest run via `--run-latest'.")
     (define-key map (kbd "W") #'spacelift-worker-pool-list-pools)
     (define-key map (kbd "w") #'spacelift-run-log-browse)
     (define-key map (kbd "y") #'spacelift-run-log-copy-url)
+    (define-key map (kbd "t") #'spacelift-run-log-retry)
     (define-key map (kbd "r") #'spacelift-run-log-refresh)
     (define-key map (kbd "g") #'spacelift-run-log-refresh)
     (define-key map (kbd "G") #'spacelift-run-log-tail)
@@ -1277,6 +1279,19 @@ run of STACK-ID."
     (spacelift--run-log-start spacelift--log-stack-id spacelift--log-run
                               (current-buffer) spacelift--log-tail))
   (message "Log tailing %s" (if spacelift--log-tail "enabled" "disabled")))
+
+(defun spacelift-run-log-retry ()
+  "Retry the specific run shown in the current log buffer."
+  (interactive)
+  (unless (and (derived-mode-p 'spacelift-run-log-mode) spacelift--log-stack-id)
+    (user-error "Not in a Spacelift run log buffer"))
+  (unless spacelift--log-run
+    (user-error "The latest-run log buffer has no specific run to retry"))
+  (let ((id (spacelift-run-id spacelift--log-run)))
+    (when (yes-or-no-p (format "Retry run %s? " id))
+      (spacelift-with-auth
+        (spacelift-run-retry spacelift--log-run)
+        (message "Retried run %s" id)))))
 
 (defun spacelift-run-log-browse ()
   "Browse the Spacelift console URL for the current log buffer.
@@ -1714,6 +1729,7 @@ When `spacectl' is not authenticated, offer to log in instead."
     (evil-define-key* '(motion normal) spacelift-run-log-mode-map
       "w" #'spacelift-run-log-browse
       "y" #'spacelift-run-log-copy-url
+      "t" #'spacelift-run-log-retry
       "r" #'spacelift-run-log-refresh
       "G" #'spacelift-run-log-tail
       "q" #'spacelift-run-log-quit
