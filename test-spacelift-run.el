@@ -25,4 +25,14 @@
                 ((symbol-function 'spacelift-run-retry)
                  (lambda (value) (setq retried value))))
         (spacelift-run-log-retry)
-        (should (eq retried run))))))
+         (should (eq retried run))))))
+
+(ert-deftest spacelift-run-log-targets-its-run-for-prioritization ()
+  (let ((run (spacelift-run-create :id "run-1" :stack-id "stack-1")))
+    (with-temp-buffer
+      (spacelift-run-log-mode)
+      (setq spacelift--log-stack-id "stack-1"
+            spacelift--log-run run)
+      (should (eq (spacelift--run-at-point-or-current) run))
+      (should (eq (lookup-key spacelift-run-log-mode-map (kbd "P"))
+                  #'spacelift-run-prioritize-at-point)))))

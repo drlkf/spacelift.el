@@ -397,8 +397,9 @@ Width and alignment flags (e.g. %-12s) are supported."
     ("W" "List worker pools" spacelift-worker-pool-list-pools)]
    ["Act"
     ("w" "Browse in console" spacelift-run-log-browse)
-    ("y" "Copy URL" spacelift-run-log-copy-url)
-    ("t" "Retry run" spacelift-run-log-retry)
+     ("y" "Copy URL" spacelift-run-log-copy-url)
+     ("t" "Retry run" spacelift-run-log-retry)
+     ("P" "Prioritize run" spacelift-run-prioritize-at-point)
     ("r" "Reload logs" spacelift-run-log-refresh)
     ("F" "Toggle tailing" spacelift-run-log-tail)]
    ["Window"
@@ -1073,7 +1074,9 @@ This is the run on the current line in a run list buffer, or the run
 displayed in the current run detail buffer."
   (or (and (derived-mode-p 'spacelift-run-list-mode)
            (spacelift-run-list-run-at-point))
-      (and (derived-mode-p 'spacelift-run-mode) spacelift--run)))
+       (and (derived-mode-p 'spacelift-run-mode) spacelift--run)
+       (and (derived-mode-p 'spacelift-run-log-mode)
+            (bound-and-true-p spacelift--log-run))))
 
 (defun spacelift-run-browse ()
   "Browse the Spacelift console URL of the run at point or current buffer.
@@ -1182,6 +1185,7 @@ Nil when the buffer streams the stack's latest run via `--run-latest'.")
     (define-key map (kbd "w") #'spacelift-run-log-browse)
     (define-key map (kbd "y") #'spacelift-run-log-copy-url)
     (define-key map (kbd "t") #'spacelift-run-log-retry)
+    (define-key map (kbd "P") #'spacelift-run-prioritize-at-point)
     (define-key map (kbd "r") #'spacelift-run-log-refresh)
     (define-key map (kbd "g") #'spacelift-run-log-refresh)
     (define-key map (kbd "G") #'spacelift-run-log-tail)
@@ -1357,9 +1361,7 @@ With a prefix argument TAIL, follow the run as it progresses.
 Works on the run under point in a run list buffer, the run shown in a
 run detail buffer, or the run of the current log buffer."
   (interactive "P")
-  (let ((run (or (spacelift--run-at-point-or-current)
-                 (and (derived-mode-p 'spacelift-run-log-mode)
-                      spacelift--log-run))))
+  (let ((run (spacelift--run-at-point-or-current)))
     (unless run
       (user-error "No run at point or in the current buffer"))
     (spacelift-with-auth
@@ -1727,9 +1729,10 @@ When `spacectl' is not authenticated, offer to log in instead."
       "q" #'quit-window
       "?" #'spacelift-help)
     (evil-define-key* '(motion normal) spacelift-run-log-mode-map
-      "w" #'spacelift-run-log-browse
-      "y" #'spacelift-run-log-copy-url
-      "t" #'spacelift-run-log-retry
+       "w" #'spacelift-run-log-browse
+       "y" #'spacelift-run-log-copy-url
+       "t" #'spacelift-run-log-retry
+       "P" #'spacelift-run-prioritize-at-point
       "r" #'spacelift-run-log-refresh
       "G" #'spacelift-run-log-tail
       "q" #'spacelift-run-log-quit

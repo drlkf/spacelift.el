@@ -81,6 +81,7 @@ Run log buffers:
 | `w`   | Browse the run URL in the Spacelift console |
 | `y`   | Copy the run/stack Spacelift console URL to the kill ring |
 | `t`   | Retry the run (asks first) |
+| `P`   | Prioritize the run (`C-u P` to deprioritize; asks first) |
 | `q`   | Stop the log process and quit the window |
 | `?`   | Show a magit-style popup of the available keys |
 
