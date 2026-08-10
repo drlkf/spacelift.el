@@ -14,6 +14,15 @@
       (should (equal command '("stack" "deprioritize" "--id" "stack-1"
                                "--run" "run-1"))))))
 
+(ert-deftest spacelift-run-discard-uses-the-requested-action ()
+  (let ((run (spacelift-run-create :id "run-1" :stack-id "stack-1"))
+        command)
+    (cl-letf (((symbol-function 'spacelift--run)
+               (lambda (&rest args) (setq command args))))
+      (spacelift-run-discard run)
+      (should (equal command '("stack" "discard" "--id" "stack-1"
+                               "--run" "run-1"))))))
+
 (ert-deftest spacelift-run-log-retry-retries-the-buffer-run ()
   (let ((run (spacelift-run-create :id "run-1" :stack-id "stack-1"))
         retried)
@@ -25,7 +34,7 @@
                 ((symbol-function 'spacelift-run-retry)
                  (lambda (value) (setq retried value))))
         (spacelift-run-log-retry)
-         (should (eq retried run))))))
+        (should (eq retried run))))))
 
 (ert-deftest spacelift-run-log-targets-its-run-for-prioritization ()
   (let ((run (spacelift-run-create :id "run-1" :stack-id "stack-1")))
@@ -36,3 +45,12 @@
       (should (eq (spacelift--run-at-point-or-current) run))
       (should (eq (lookup-key spacelift-run-log-mode-map (kbd "P"))
                   #'spacelift-run-prioritize-at-point)))))
+
+(ert-deftest spacelift-discard-is-bound-to-d-in-action-buffers ()
+  (dolist (entry `((,spacelift-stack-list-mode-map . spacelift-stack-list-discard)
+                   (,spacelift-stack-mode-map . spacelift-stack-discard)
+                   (,spacelift-run-list-mode-map . spacelift-run-discard-at-point)
+                   (,spacelift-run-mode-map . spacelift-run-discard-at-point)
+                   (,spacelift-run-log-mode-map . spacelift-run-discard-at-point)))
+    (should (eq (lookup-key (car entry) (kbd "d"))
+                (cdr entry)))))

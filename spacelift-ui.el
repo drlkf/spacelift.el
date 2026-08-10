@@ -329,6 +329,7 @@ Width and alignment flags (e.g. %-12s) are supported."
     ("y" "Copy URL" spacelift-stack-list-copy-url)
     ("l" "View current run logs" spacelift-stack-list-latest-logs)
     ("c" "Confirm current run" spacelift-stack-list-confirm)
+    ("d" "Discard current run" spacelift-stack-list-discard)
     ("t" "Retry current run" spacelift-stack-list-retry)
     ("f" "Toggle non-successful only" spacelift-stack-list-toggle-unsuccessful)
     ("r" "Reload" spacelift-stack-list-refresh)]
@@ -347,6 +348,7 @@ Width and alignment flags (e.g. %-12s) are supported."
     ("y" "Copy URL" spacelift-stack-copy-url)
     ("l" "View current run logs" spacelift-stack-latest-logs)
     ("c" "Confirm current run" spacelift-stack-confirm)
+    ("d" "Discard current run" spacelift-stack-discard)
     ("t" "Retry current run" spacelift-stack-retry)
     ("r" "Reload" spacelift-stack-refresh)]
    ["Window"
@@ -366,6 +368,7 @@ Width and alignment flags (e.g. %-12s) are supported."
     ("y" "Copy URL" spacelift-run-copy-url)
     ("l" "View logs" spacelift-run-logs)
     ("c" "Confirm run" spacelift-run-confirm-at-point)
+    ("d" "Discard run" spacelift-run-discard-at-point)
     ("t" "Retry run" spacelift-run-retry-at-point)
     ("P" "Prioritize run" spacelift-run-prioritize-at-point)
     ("r" "Reload" spacelift-run-list-refresh)]
@@ -383,6 +386,7 @@ Width and alignment flags (e.g. %-12s) are supported."
     ("y" "Copy URL" spacelift-run-copy-url)
     ("l" "View logs" spacelift-run-logs)
     ("c" "Confirm run" spacelift-run-confirm-at-point)
+    ("d" "Discard run" spacelift-run-discard-at-point)
     ("t" "Retry run" spacelift-run-retry-at-point)
     ("P" "Prioritize run" spacelift-run-prioritize-at-point)
     ("r" "Reload" spacelift-run-refresh)]
@@ -397,9 +401,9 @@ Width and alignment flags (e.g. %-12s) are supported."
     ("W" "List worker pools" spacelift-worker-pool-list-pools)]
    ["Act"
     ("w" "Browse in console" spacelift-run-log-browse)
-     ("y" "Copy URL" spacelift-run-log-copy-url)
-     ("t" "Retry run" spacelift-run-log-retry)
-     ("P" "Prioritize run" spacelift-run-prioritize-at-point)
+    ("y" "Copy URL" spacelift-run-log-copy-url)
+    ("t" "Retry run" spacelift-run-log-retry)
+    ("P" "Prioritize run" spacelift-run-prioritize-at-point)
     ("r" "Reload logs" spacelift-run-log-refresh)
     ("F" "Toggle tailing" spacelift-run-log-tail)]
    ["Window"
@@ -478,6 +482,7 @@ Width and alignment flags (e.g. %-12s) are supported."
     (define-key map (kbd "y") #'spacelift-stack-list-copy-url)
     (define-key map (kbd "l") #'spacelift-stack-list-latest-logs)
     (define-key map (kbd "c") #'spacelift-stack-list-confirm)
+    (define-key map (kbd "d") #'spacelift-stack-list-discard)
     (define-key map (kbd "t") #'spacelift-stack-list-retry)
     (define-key map (kbd "f") #'spacelift-stack-list-toggle-unsuccessful)
     (define-key map (kbd "r") #'spacelift-stack-list-refresh)
@@ -635,6 +640,32 @@ confirmation first.  Return non-nil when a run was confirmed."
     (when (spacelift--confirm-stack-current-run stack)
       (spacelift-stack-list-refresh))))
 
+(defun spacelift--discard-stack-current-run (stack)
+  "Discard STACK's current run when it is awaiting confirmation."
+  (spacelift-with-auth
+    (let ((run (spacelift-stack-current-run stack))
+          (stack-id (spacelift-stack-id stack)))
+      (unless run
+        (user-error "Stack %s has no runs" stack-id))
+      (let ((state (spacelift-run-state run))
+            (id (spacelift-run-id run)))
+        (unless (equal state "UNCONFIRMED")
+          (user-error "Run %s of stack %s is not awaiting confirmation (state: %s)"
+                      id stack-id (or state "unknown")))
+        (when (yes-or-no-p (format "Discard run %s of stack %s? " id stack-id))
+          (spacelift-run-discard run)
+          (message "Discarded run %s" id)
+          t)))))
+
+(defun spacelift-stack-list-discard ()
+  "Discard the current run of the stack on the current line."
+  (interactive)
+  (let ((stack (spacelift-stack-list-stack-at-point)))
+    (unless stack
+      (user-error "No stack on this line"))
+    (when (spacelift--discard-stack-current-run stack)
+      (spacelift-stack-list-refresh))))
+
 (defun spacelift--retry-stack-current-run (stack)
   "Retry STACK's current run.
 The current run is the run displayed on the stack line: the blocking run
@@ -690,6 +721,7 @@ When `spacectl' is not authenticated, offer to log in instead."
     (define-key map (kbd "y") #'spacelift-stack-copy-url)
     (define-key map (kbd "l") #'spacelift-stack-latest-logs)
     (define-key map (kbd "c") #'spacelift-stack-confirm)
+    (define-key map (kbd "d") #'spacelift-stack-discard)
     (define-key map (kbd "t") #'spacelift-stack-retry)
     (define-key map (kbd "r") #'spacelift-stack-refresh)
     (define-key map (kbd "g") #'spacelift-stack-refresh)
@@ -867,6 +899,14 @@ progresses."
   (when (spacelift--confirm-stack-current-run spacelift--stack)
     (spacelift-stack-refresh)))
 
+(defun spacelift-stack-discard ()
+  "Discard the current run of the stack in the current detail buffer."
+  (interactive)
+  (unless (and (derived-mode-p 'spacelift-stack-mode) spacelift--stack)
+    (user-error "Not in a Spacelift stack buffer"))
+  (when (spacelift--discard-stack-current-run spacelift--stack)
+    (spacelift-stack-refresh)))
+
 (defun spacelift-stack-retry ()
   "Retry the current run of the stack in the current detail buffer."
   (interactive)
@@ -900,6 +940,7 @@ When `spacectl' is not authenticated, offer to log in instead."
     (define-key map (kbd "y") #'spacelift-run-copy-url)
     (define-key map (kbd "l") #'spacelift-run-logs)
     (define-key map (kbd "c") #'spacelift-run-confirm-at-point)
+    (define-key map (kbd "d") #'spacelift-run-discard-at-point)
     (define-key map (kbd "t") #'spacelift-run-retry-at-point)
     (define-key map (kbd "P") #'spacelift-run-prioritize-at-point)
     (define-key map (kbd "r") #'spacelift-run-list-refresh)
@@ -990,6 +1031,7 @@ When `spacectl' is not authenticated, offer to log in instead."
     (define-key map (kbd "y") #'spacelift-run-copy-url)
     (define-key map (kbd "l") #'spacelift-run-logs)
     (define-key map (kbd "c") #'spacelift-run-confirm-at-point)
+    (define-key map (kbd "d") #'spacelift-run-discard-at-point)
     (define-key map (kbd "t") #'spacelift-run-retry-at-point)
     (define-key map (kbd "P") #'spacelift-run-prioritize-at-point)
     (define-key map (kbd "r") #'spacelift-run-refresh)
@@ -1074,9 +1116,9 @@ This is the run on the current line in a run list buffer, or the run
 displayed in the current run detail buffer."
   (or (and (derived-mode-p 'spacelift-run-list-mode)
            (spacelift-run-list-run-at-point))
-       (and (derived-mode-p 'spacelift-run-mode) spacelift--run)
-       (and (derived-mode-p 'spacelift-run-log-mode)
-            (bound-and-true-p spacelift--log-run))))
+      (and (derived-mode-p 'spacelift-run-mode) spacelift--run)
+      (and (derived-mode-p 'spacelift-run-log-mode)
+           (bound-and-true-p spacelift--log-run))))
 
 (defun spacelift-run-browse ()
   "Browse the Spacelift console URL of the run at point or current buffer.
@@ -1121,6 +1163,30 @@ confirmation first."
         (spacelift-with-auth
           (spacelift-run-confirm run)
           (message "Confirmed run %s" id)
+          (cond
+           ((derived-mode-p 'spacelift-run-list-mode)
+            (spacelift-run-list-refresh))
+           ((derived-mode-p 'spacelift-run-mode)
+            (spacelift-run-refresh))))))))
+
+(defun spacelift-run-discard-at-point ()
+  "Discard the unconfirmed run at point or in the current buffer.
+Works on the run under point in a run list buffer and on the run shown
+in a run detail buffer.  Discarding is a write operation, so it asks for
+confirmation first."
+  (interactive)
+  (let ((run (spacelift--run-at-point-or-current)))
+    (unless run
+      (user-error "No run at point or in the current buffer"))
+    (let ((state (spacelift-run-state run))
+          (id (spacelift-run-id run)))
+      (unless (equal state "UNCONFIRMED")
+        (user-error "Run %s is not awaiting confirmation (state: %s)"
+                    id (or state "unknown")))
+      (when (yes-or-no-p (format "Discard run %s? " id))
+        (spacelift-with-auth
+          (spacelift-run-discard run)
+          (message "Discarded run %s" id)
           (cond
            ((derived-mode-p 'spacelift-run-list-mode)
             (spacelift-run-list-refresh))
@@ -1185,6 +1251,7 @@ Nil when the buffer streams the stack's latest run via `--run-latest'.")
     (define-key map (kbd "w") #'spacelift-run-log-browse)
     (define-key map (kbd "y") #'spacelift-run-log-copy-url)
     (define-key map (kbd "t") #'spacelift-run-log-retry)
+    (define-key map (kbd "d") #'spacelift-run-discard-at-point)
     (define-key map (kbd "P") #'spacelift-run-prioritize-at-point)
     (define-key map (kbd "r") #'spacelift-run-log-refresh)
     (define-key map (kbd "g") #'spacelift-run-log-refresh)
@@ -1713,6 +1780,7 @@ When `spacectl' is not authenticated, offer to log in instead."
       "y" #'spacelift-run-copy-url
       "l" #'spacelift-run-logs
       "c" #'spacelift-run-confirm-at-point
+      "d" #'spacelift-run-discard-at-point
       "t" #'spacelift-run-retry-at-point
       "P" #'spacelift-run-prioritize-at-point
       "r" #'spacelift-run-list-refresh
@@ -1723,16 +1791,18 @@ When `spacectl' is not authenticated, offer to log in instead."
       "y" #'spacelift-run-copy-url
       "l" #'spacelift-run-logs
       "c" #'spacelift-run-confirm-at-point
+      "d" #'spacelift-run-discard-at-point
       "t" #'spacelift-run-retry-at-point
       "P" #'spacelift-run-prioritize-at-point
       "r" #'spacelift-run-refresh
       "q" #'quit-window
       "?" #'spacelift-help)
     (evil-define-key* '(motion normal) spacelift-run-log-mode-map
-       "w" #'spacelift-run-log-browse
-       "y" #'spacelift-run-log-copy-url
-       "t" #'spacelift-run-log-retry
-       "P" #'spacelift-run-prioritize-at-point
+      "w" #'spacelift-run-log-browse
+      "y" #'spacelift-run-log-copy-url
+      "t" #'spacelift-run-log-retry
+      "d" #'spacelift-run-discard-at-point
+      "P" #'spacelift-run-prioritize-at-point
       "r" #'spacelift-run-log-refresh
       "G" #'spacelift-run-log-tail
       "q" #'spacelift-run-log-quit
@@ -1743,6 +1813,7 @@ When `spacectl' is not authenticated, offer to log in instead."
       "y" #'spacelift-stack-list-copy-url
       "l" #'spacelift-stack-list-latest-logs
       "c" #'spacelift-stack-list-confirm
+      "d" #'spacelift-stack-list-discard
       "t" #'spacelift-stack-list-retry
       "f" #'spacelift-stack-list-toggle-unsuccessful)
     (evil-define-key* '(motion normal) spacelift-stack-mode-map
@@ -1751,6 +1822,7 @@ When `spacectl' is not authenticated, offer to log in instead."
       "y" #'spacelift-stack-copy-url
       "l" #'spacelift-stack-latest-logs
       "c" #'spacelift-stack-confirm
+      "d" #'spacelift-stack-discard
       "t" #'spacelift-stack-retry)
     (evil-define-key* '(motion normal) spacelift-worker-pool-list-mode-map
       (kbd "RET") #'spacelift-worker-pool-list-workers

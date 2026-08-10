@@ -120,6 +120,14 @@ RUN-METADATA, when non-nil, is passed as `--run-metadata'.  Return
       (setq args (append args (list "--run-metadata" run-metadata))))
     (apply #'spacelift--run args)))
 
+(defun spacelift-run-discard (run)
+  "Discard the unconfirmed tracked RUN via `spacectl stack discard'.
+Return `spacectl''s raw output.  This is a write operation."
+  (apply #'spacelift--run
+         (list "stack" "discard"
+               "--id" (spacelift-run-stack-id run)
+               "--run" (spacelift-run-id run))))
+
 (defun spacelift-run-retry (run)
   "Retry the failed RUN via `spacectl stack retry'.
 Return `spacectl''s raw output.  This is a write operation."

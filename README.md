@@ -52,6 +52,7 @@ Stack list and stack detail buffers:
 | `y`   | Copy the stack's Spacelift console URL to the kill ring |
 | `l`   | View the stack's current run logs (blocking run when blocked, else latest; `C-u l` to follow/tail) |
 | `c`   | Confirm the stack's current run if unconfirmed (blocking run when blocked, else latest; asks first) |
+| `d`   | Discard the stack's current run if unconfirmed (blocking run when blocked, else latest; asks first) |
 | `j`/`k`, `n`/`p` | Move down/up (list buffer) |
 
 Run list and run detail buffers:
@@ -67,6 +68,7 @@ Run list and run detail buffers:
 | `y`   | Copy the run's Spacelift console URL to the kill ring |
 | `l`   | View the run's logs (`C-u l` to follow/tail) |
 | `c`   | Confirm an unconfirmed run (asks first) |
+| `d`   | Discard an unconfirmed run (asks first) |
 | `t`   | Retry a failed run (asks first) |
 | `P`   | Prioritize a run (`C-u P` to deprioritize; asks first) |
 | `j`/`k`, `n`/`p` | Move down/up (list buffer) |
@@ -81,6 +83,7 @@ Run log buffers:
 | `w`   | Browse the run URL in the Spacelift console |
 | `y`   | Copy the run/stack Spacelift console URL to the kill ring |
 | `t`   | Retry the run (asks first) |
+| `d`   | Discard the run (asks first) |
 | `P`   | Prioritize the run (`C-u P` to deprioritize; asks first) |
 | `q`   | Stop the log process and quit the window |
 | `?`   | Show a magit-style popup of the available keys |
