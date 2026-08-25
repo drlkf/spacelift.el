@@ -2,6 +2,20 @@
 (require 'spacelift-run)
 (require 'spacelift-ui)
 
+(ert-deftest spacelift-auth-offers-login-only-once-after-failure ()
+  (let ((offers 0)
+        (failure (list "still unauthenticated")))
+    (cl-letf (((symbol-function 'spacelift--select-profile) #'ignore)
+              ((symbol-function 'spacelift--maybe-offer-login)
+               (lambda (&rest _)
+                 (setq offers (1+ offers))
+                 (signal 'spacelift-not-authenticated failure))))
+      (should-error (spacelift--call-with-auth
+                     (lambda ()
+                       (signal 'spacelift-not-authenticated failure)))
+                    :type 'spacelift-not-authenticated)
+      (should (= offers 1)))))
+
 (ert-deftest spacelift-run-prioritize-uses-the-requested-action ()
   (let ((run (spacelift-run-create :id "run-1" :stack-id "stack-1"))
         command)

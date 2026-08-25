@@ -301,10 +301,11 @@ the originally requested operation."
           (message "Spacelift login for %s did not complete." alias))))))
 
 ;;;###autoload
-(defun spacelift-profile-login (alias &optional on-success)
+(defun spacelift-profile-login (alias &optional on-success force)
   "Log in to Spacelift by running `spacectl profile login' for ALIAS.
-When ALIAS already has a valid, unexpired session, no login is started
-and ON-SUCCESS, if any, is called immediately; the function returns nil.
+  When ALIAS already has a valid, unexpired session, no login is started
+  and ON-SUCCESS, if any, is called immediately; the function returns nil.
+  FORCE skips this existing-session check.
 Otherwise the interactive login flow runs in a dedicated terminal
 buffer.  The stored endpoint is reused via `--endpoint', and
 `spacelift-login-method', when set, is passed via `--method' to skip the
@@ -320,7 +321,8 @@ operation that triggered the login.  Returns the login buffer."
     (user-error "A profile alias is required to log in"))
   ;; Recognise an existing, still-valid session and proceed without forcing
   ;; a fresh interactive login.
-  (if (and (equal alias (spacelift--default-login-alias))
+  (if (and (not force)
+           (equal alias (spacelift--default-login-alias))
            (spacelift--session-valid-p))
       (progn
         (message "Spacelift session for %s is still valid; skipping login."
@@ -363,7 +365,7 @@ operation that triggered the login.  Returns the login buffer."
                buffer-name)
       buffer)))
 
-(defun spacelift--maybe-offer-login (error-data &optional on-success)
+(defun spacelift--maybe-offer-login (error-data &optional on-success force)
   "Offer to log in after an authentication failure described by ERROR-DATA.
 When the user accepts, start the login flow for the default profile and,
 on success, call ON-SUCCESS to resume the requested operation.  Signal
@@ -374,10 +376,11 @@ on success, call ON-SUCCESS to resume the requested operation.  Signal
       (spacelift-profile-login
        (or (spacelift--default-login-alias)
            (read-string "Spacelift profile alias: "))
-       on-success)
+       on-success
+       force)
     (signal 'spacelift-not-authenticated error-data)))
 
-(defun spacelift--call-with-auth (thunk)
+(defun spacelift--call-with-auth (thunk &optional retrying)
   "Call THUNK, offering an interactive login on authentication failure.
 When THUNK signals `spacelift-not-authenticated' and
 `spacelift-login-offer' is non-nil, the user is asked whether to log in.
@@ -388,9 +391,12 @@ login succeeds, resuming the originally requested operation."
         (spacelift--select-profile)
         (funcall thunk))
     (spacelift-not-authenticated
-     (spacelift--maybe-offer-login
-      (cdr spacelift--err)
-      (lambda () (spacelift--call-with-auth thunk))))))
+     (if retrying
+         (signal (car spacelift--err) (cdr spacelift--err))
+       (spacelift--maybe-offer-login
+        (cdr spacelift--err)
+        (lambda () (spacelift--call-with-auth thunk t))
+        t)))))
 
 (defmacro spacelift-with-auth (&rest body)
   "Evaluate BODY, offering an interactive login on authentication failure.
