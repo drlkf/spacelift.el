@@ -331,6 +331,7 @@ Width and alignment flags (e.g. %-12s) are supported."
     ("c" "Confirm current run" spacelift-stack-list-confirm)
     ("d" "Discard current run" spacelift-stack-list-discard)
     ("t" "Retry current run" spacelift-stack-list-retry)
+    ("P" "Prioritize current run" spacelift-stack-list-prioritize)
     ("f" "Toggle non-successful only" spacelift-stack-list-toggle-unsuccessful)
     ("r" "Reload" spacelift-stack-list-refresh)]
    ["Window"
@@ -350,6 +351,7 @@ Width and alignment flags (e.g. %-12s) are supported."
     ("c" "Confirm current run" spacelift-stack-confirm)
     ("d" "Discard current run" spacelift-stack-discard)
     ("t" "Retry current run" spacelift-stack-retry)
+    ("P" "Prioritize current run" spacelift-stack-prioritize)
     ("r" "Reload" spacelift-stack-refresh)]
    ["Window"
     ("q" "Quit window" quit-window)
@@ -484,6 +486,7 @@ Width and alignment flags (e.g. %-12s) are supported."
     (define-key map (kbd "c") #'spacelift-stack-list-confirm)
     (define-key map (kbd "d") #'spacelift-stack-list-discard)
     (define-key map (kbd "t") #'spacelift-stack-list-retry)
+    (define-key map (kbd "P") #'spacelift-stack-list-prioritize)
     (define-key map (kbd "f") #'spacelift-stack-list-toggle-unsuccessful)
     (define-key map (kbd "r") #'spacelift-stack-list-refresh)
     (define-key map (kbd "g") #'spacelift-stack-list-refresh)
@@ -692,6 +695,31 @@ was retried."
     (when (spacelift--retry-stack-current-run stack)
       (spacelift-stack-list-refresh))))
 
+(defun spacelift--prioritize-stack-current-run (stack &optional deprioritize)
+  "Prioritize STACK's current run, or deprioritize it when requested."
+  (spacelift-with-auth
+    (let ((run (spacelift-stack-current-run stack))
+          (stack-id (spacelift-stack-id stack)))
+      (unless run
+        (user-error "Stack %s has no runs" stack-id))
+      (let ((id (spacelift-run-id run))
+            (action (if deprioritize "Deprioritize" "Prioritize")))
+        (when (yes-or-no-p (format "%s run %s of stack %s? "
+                                   action id stack-id))
+          (spacelift-run-prioritize run deprioritize)
+          (message "%sd run %s" action id)
+          t)))))
+
+(defun spacelift-stack-list-prioritize (&optional deprioritize)
+  "Prioritize the current run of the stack on the current line.
+With a prefix argument DEPRIORITIZE the run instead."
+  (interactive "P")
+  (let ((stack (spacelift-stack-list-stack-at-point)))
+    (unless stack
+      (user-error "No stack on this line"))
+    (when (spacelift--prioritize-stack-current-run stack deprioritize)
+      (spacelift-stack-list-refresh))))
+
 ;;;###autoload
 (defun spacelift-stack-list-stacks (&optional search limit)
   "Display the list of Spacelift stacks in a dedicated buffer.
@@ -723,6 +751,7 @@ When `spacectl' is not authenticated, offer to log in instead."
     (define-key map (kbd "c") #'spacelift-stack-confirm)
     (define-key map (kbd "d") #'spacelift-stack-discard)
     (define-key map (kbd "t") #'spacelift-stack-retry)
+    (define-key map (kbd "P") #'spacelift-stack-prioritize)
     (define-key map (kbd "r") #'spacelift-stack-refresh)
     (define-key map (kbd "g") #'spacelift-stack-refresh)
     (define-key map (kbd "q") #'quit-window)
@@ -913,6 +942,15 @@ progresses."
   (unless (and (derived-mode-p 'spacelift-stack-mode) spacelift--stack)
     (user-error "Not in a Spacelift stack buffer"))
   (when (spacelift--retry-stack-current-run spacelift--stack)
+    (spacelift-stack-refresh)))
+
+(defun spacelift-stack-prioritize (&optional deprioritize)
+  "Prioritize the current run of the stack in the current detail buffer.
+With a prefix argument DEPRIORITIZE the run instead."
+  (interactive "P")
+  (unless (and (derived-mode-p 'spacelift-stack-mode) spacelift--stack)
+    (user-error "Not in a Spacelift stack buffer"))
+  (when (spacelift--prioritize-stack-current-run spacelift--stack deprioritize)
     (spacelift-stack-refresh)))
 
 ;;;###autoload
@@ -1815,6 +1853,7 @@ When `spacectl' is not authenticated, offer to log in instead."
       "c" #'spacelift-stack-list-confirm
       "d" #'spacelift-stack-list-discard
       "t" #'spacelift-stack-list-retry
+      "P" #'spacelift-stack-list-prioritize
       "f" #'spacelift-stack-list-toggle-unsuccessful)
     (evil-define-key* '(motion normal) spacelift-stack-mode-map
       "R" #'spacelift-stack-runs
@@ -1823,7 +1862,8 @@ When `spacectl' is not authenticated, offer to log in instead."
       "l" #'spacelift-stack-latest-logs
       "c" #'spacelift-stack-confirm
       "d" #'spacelift-stack-discard
-      "t" #'spacelift-stack-retry)
+      "t" #'spacelift-stack-retry
+      "P" #'spacelift-stack-prioritize)
     (evil-define-key* '(motion normal) spacelift-worker-pool-list-mode-map
       (kbd "RET") #'spacelift-worker-pool-list-workers
       "Q" #'spacelift-worker-pool-list-queue

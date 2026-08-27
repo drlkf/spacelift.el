@@ -53,6 +53,7 @@ Stack list and stack detail buffers:
 | `l`   | View the stack's current run logs (blocking run when blocked, else latest; `C-u l` to follow/tail) |
 | `c`   | Confirm the stack's current run if unconfirmed (blocking run when blocked, else latest; asks first) |
 | `d`   | Discard the stack's current run if unconfirmed (blocking run when blocked, else latest; asks first) |
+| `P`   | Prioritize the stack's current run (`C-u P` to deprioritize; asks first) |
 | `j`/`k`, `n`/`p` | Move down/up (list buffer) |
 
 Run list and run detail buffers:

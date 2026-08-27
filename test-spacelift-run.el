@@ -68,3 +68,11 @@
                    (,spacelift-run-log-mode-map . spacelift-run-discard-at-point)))
     (should (eq (lookup-key (car entry) (kbd "d"))
                 (cdr entry)))))
+
+(ert-deftest spacelift-prioritize-is-bound-to-p-in-stack-buffers ()
+  (dolist (map (list spacelift-stack-list-mode-map
+                     spacelift-stack-mode-map))
+    (should (eq (lookup-key map (kbd "P"))
+                (if (eq map spacelift-stack-list-mode-map)
+                    #'spacelift-stack-list-prioritize
+                  #'spacelift-stack-prioritize)))))
