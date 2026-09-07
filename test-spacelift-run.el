@@ -28,6 +28,47 @@
       (should (equal command '("stack" "deprioritize" "--id" "stack-1"
                                "--run" "run-1"))))))
 
+(ert-deftest spacelift-owned-unconfirmed-run-uses-dedicated-face ()
+  (let ((run (spacelift-run-create :state "UNCONFIRMED"
+                                   :triggered-by "user@example.com")))
+    (cl-letf (((symbol-function 'spacelift-current-user-login)
+               (lambda (&optional _) "user@example.com")))
+      (should (eq (get-text-property 0 'face
+                                     (spacelift--propertize-run-state run))
+                  'spacelift-state-unconfirmed-owned-face)))))
+
+(ert-deftest spacelift-vcs-owned-unconfirmed-run-uses-dedicated-face ()
+  (let ((run (spacelift-run-create
+              :state "UNCONFIRMED"
+              :triggered-by "vcs/commit"
+              :commit (spacelift-commit-create :login "vcs-user"))))
+    (let ((spacelift-vcs-login "vcs-user"))
+      (should (spacelift-run-owned-p run)))))
+
+(ert-deftest spacelift-name-owned-unconfirmed-run-uses-dedicated-face ()
+  (let ((run (spacelift-run-create
+              :state "UNCONFIRMED"
+              :triggered-by "vcs/commit"
+              :commit (spacelift-commit-create :author "User NAME"))))
+    (cl-letf (((symbol-function 'spacelift-current-user-name)
+               (lambda (&optional _) "User Name")))
+      (should (spacelift-run-owned-p run)))))
+
+(ert-deftest spacelift-stack-line-owned-unconfirmed-run-uses-dedicated-face ()
+  (let ((stack (spacelift-stack-create
+                :id "stack-1"
+                :state "UNCONFIRMED"
+                :blocker-id "run-1"
+                :blocker-state "UNCONFIRMED"
+                :blocker-commit (spacelift-commit-create
+                                 :author "User Name"))))
+    (cl-letf (((symbol-function 'spacelift-current-user-name)
+               (lambda (&optional _) "User Name")))
+      (let ((line (spacelift--stack-line stack)))
+        (should (eq (get-text-property (string-match "UNCONFIRMED" line)
+                                       'face line)
+                    'spacelift-state-unconfirmed-owned-face))))))
+
 (ert-deftest spacelift-run-discard-uses-the-requested-action ()
   (let ((run (spacelift-run-create :id "run-1" :stack-id "stack-1"))
         command)

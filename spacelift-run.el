@@ -70,11 +70,36 @@ console URL can be built.  Slot RAW holds the original parsed alist."
    :delta (spacelift-run--parse-delta (spacelift--alist-get 'delta object))
    :raw object))
 
+(defun spacelift-run-owned-p (run)
+  "Return non-nil when RUN belongs to the authenticated user."
+  (let ((commit (spacelift-run-commit run))
+        (same-identity-p
+         (lambda (a b)
+           (and a b (string-equal (downcase a) (downcase b))))))
+    (or (funcall same-identity-p (spacelift-run-triggered-by run)
+                 (spacelift-current-user-login))
+        (and commit spacelift-vcs-login
+             (funcall same-identity-p (spacelift-commit-login commit)
+                      spacelift-vcs-login))
+        (and commit
+             (funcall same-identity-p (spacelift-commit-author commit)
+                      (spacelift-current-user-name))))))
+
 (defun spacelift-run-browse-url (run)
   "Return the Spacelift console URL for RUN."
   (spacelift-run-url (spacelift-run-stack-id run) (spacelift-run-id run)))
 
 ;;; API
+
+(defun spacelift-stack--blocker-run (stack)
+  "Return a lightweight run for STACK's blocker, or nil when unblocked."
+  (when (spacelift-stack-blocker-id stack)
+    (spacelift-run-create
+     :id (spacelift-stack-blocker-id stack)
+     :stack-id (spacelift-stack-id stack)
+     :state (spacelift-stack-blocker-state stack)
+     :branch (spacelift-stack-blocker-branch stack)
+     :commit (spacelift-stack-blocker-commit stack))))
 
 (defun spacelift-stack-current-run (stack)
   "Return the run to act on for STACK: its blocking run when blocked.
@@ -87,14 +112,8 @@ The blocked run's slots are a snapshot from when STACK was last
 loaded, not a live fetch: its state may be stale (a write acting on
 it is validated server-side by `spacectl'), and the state is nil when
 the blocking run's details were unavailable at load time."
-  (if (spacelift-stack-blocker-id stack)
-      (spacelift-run-create
-       :id (spacelift-stack-blocker-id stack)
-       :stack-id (spacelift-stack-id stack)
-       :state (spacelift-stack-blocker-state stack)
-       :branch (spacelift-stack-blocker-branch stack)
-       :commit (spacelift-stack-blocker-commit stack))
-    (car (spacelift-stack-run-list (spacelift-stack-id stack) 1))))
+  (or (spacelift-stack--blocker-run stack)
+      (car (spacelift-stack-run-list (spacelift-stack-id stack) 1))))
 
 (defun spacelift-stack-run-list (stack-id &optional max-results preview)
   "Return a list of `spacelift-run' for the stack identified by STACK-ID.

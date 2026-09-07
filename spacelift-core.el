@@ -75,6 +75,11 @@ of the supported method symbols to skip that prompt:
                  (const :tag "GitHub access token" github))
   :group 'spacelift)
 
+(defcustom spacelift-vcs-login nil
+  "VCS login used to identify push-triggered runs as owned by you."
+  :type '(choice (const :tag "Unset" nil) string)
+  :group 'spacelift)
+
 (define-error 'spacelift-error "Spacelift error")
 (define-error 'spacelift-not-authenticated
               "Not authenticated with Spacelift" 'spacelift-error)
@@ -238,6 +243,28 @@ listing can disagree with the token's real validity."
          (exp (and payload (spacelift--alist-get 'exp payload))))
     (and (numberp exp)
          (> exp (float-time)))))
+
+(defvar spacelift--current-user-login nil
+  "Cached login of the authenticated Spacelift user.")
+
+(defvar spacelift--current-user-name nil
+  "Cached full name of the authenticated Spacelift user.")
+
+(defun spacelift-current-user-login (&optional refresh)
+  "Return the login of the authenticated user, or nil when unknown.
+With REFRESH non-nil, re-read the current session token."
+  (when (or refresh (null spacelift--current-user-login))
+    (setq spacelift--current-user-login
+          (spacelift--alist-get 'sub (spacelift--token-payload))))
+  spacelift--current-user-login)
+
+(defun spacelift-current-user-name (&optional refresh)
+  "Return the full name of the authenticated user, or nil when unknown.
+With REFRESH non-nil, re-read the current session token."
+  (when (or refresh (null spacelift--current-user-name))
+    (setq spacelift--current-user-name
+          (spacelift--alist-get 'full_name (spacelift--token-payload))))
+  spacelift--current-user-name)
 
 (defun spacelift-authenticated-p ()
   "Return non-nil when `spacectl' has a valid, unexpired Spacelift session."

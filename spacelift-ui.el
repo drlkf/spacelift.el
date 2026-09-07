@@ -94,6 +94,11 @@
   "Face for an in-progress stack state."
   :group 'spacelift)
 
+(defface spacelift-state-unconfirmed-owned-face
+  '((t :background "#8b8000"))
+  "Face for an unconfirmed run triggered by the logged-in user."
+  :group 'spacelift)
+
 (defface spacelift-state-skipped-face
   '((t :inherit shadow))
   "Face for a skipped run state."
@@ -225,6 +230,21 @@ Width and alignment flags (e.g. %-12s) are supported."
   (let ((value (or state "")))
     (propertize value 'face (spacelift--state-face state))))
 
+(defun spacelift--propertize-run-state (run)
+  "Return RUN's state propertized with its appropriate face."
+  (let ((state (spacelift-run-state run)))
+    (if (and (equal state "UNCONFIRMED")
+             (spacelift-run-owned-p run))
+        (propertize (or state "") 'face 'spacelift-state-unconfirmed-owned-face)
+      (spacelift--propertize-state state))))
+
+(defun spacelift--propertize-stack-state (stack)
+  "Return STACK's display state with owned-run highlighting when applicable."
+  (let ((run (spacelift-stack--blocker-run stack)))
+    (if (and run (spacelift-run-state run))
+        (spacelift--propertize-run-state run)
+      (spacelift--propertize-state (spacelift-stack-display-state stack)))))
+
 (defun spacelift--format-labels (labels)
   "Return LABELS, a list of strings, joined and propertized."
   (mapconcat (lambda (label)
@@ -243,7 +263,7 @@ Width and alignment flags (e.g. %-12s) are supported."
      spacelift-stack-line-format
      `((?n . ,(or (spacelift-stack-name stack) ""))
        (?i . ,(or (spacelift-stack-id stack) ""))
-       (?s . ,(spacelift--propertize-state (spacelift-stack-display-state stack)))
+       (?s . ,(spacelift--propertize-stack-state stack))
        (?b . ,(or (spacelift-stack-display-branch stack) ""))
        (?a . ,(or (and commit (or (spacelift-commit-author commit)
                                   (spacelift-commit-login commit)))
@@ -261,7 +281,7 @@ Width and alignment flags (e.g. %-12s) are supported."
     (format-spec
      spacelift-run-line-format
      `((?i . ,(or (spacelift-run-id run) ""))
-       (?s . ,(spacelift--propertize-state (spacelift-run-state run)))
+       (?s . ,(spacelift--propertize-run-state run))
        (?t . ,(or (spacelift-run-title run) ""))
        (?b . ,(or (spacelift-run-branch run) ""))
        (?c . ,(spacelift--short-hash commit))
@@ -299,7 +319,7 @@ Width and alignment flags (e.g. %-12s) are supported."
     (format "%-4s  %-30s  %-17s  %s"
             (or (spacelift-queued-run-position queued) "")
             (or (spacelift-queued-run-stack-name queued) "")
-            (spacelift--propertize-state (spacelift-run-state run))
+            (spacelift--propertize-run-state run)
             (or (spacelift-run-title run) ""))))
 
 ;;; URL helpers
@@ -1098,7 +1118,7 @@ When `spacectl' is not authenticated, offer to log in instead."
                             (spacelift-run-id run))
                         'face '(spacelift-heading-face (:height 1.2)))
             "  "
-            (spacelift--propertize-state (spacelift-run-state run))
+            (spacelift--propertize-run-state run)
             "\n\n")
 
     (spacelift--insert-heading "General")
