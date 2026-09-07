@@ -326,7 +326,7 @@ Width and alignment flags (e.g. %-12s) are supported."
     ("W" "List worker pools" spacelift-worker-pool-list-pools)]
    ["Act"
     ("w" "Browse in console" spacelift-stack-list-browse)
-    ("y" "Copy URL" spacelift-stack-list-copy-url)
+    ("Y" "Copy URL" spacelift-stack-list-copy-url)
     ("l" "View current run logs" spacelift-stack-list-latest-logs)
     ("c" "Confirm current run" spacelift-stack-list-confirm)
     ("d" "Discard current run" spacelift-stack-list-discard)
@@ -346,7 +346,7 @@ Width and alignment flags (e.g. %-12s) are supported."
     ("W" "List worker pools" spacelift-worker-pool-list-pools)]
    ["Act"
     ("w" "Browse in console" spacelift-stack-browse)
-    ("y" "Copy URL" spacelift-stack-copy-url)
+    ("Y" "Copy URL" spacelift-stack-copy-url)
     ("l" "View current run logs" spacelift-stack-latest-logs)
     ("c" "Confirm current run" spacelift-stack-confirm)
     ("d" "Discard current run" spacelift-stack-discard)
@@ -367,7 +367,7 @@ Width and alignment flags (e.g. %-12s) are supported."
     ("W" "List worker pools" spacelift-worker-pool-list-pools)]
    ["Act"
     ("w" "Browse run URL" spacelift-run-browse)
-    ("y" "Copy URL" spacelift-run-copy-url)
+    ("Y" "Copy URL" spacelift-run-copy-url)
     ("l" "View logs" spacelift-run-logs)
     ("c" "Confirm run" spacelift-run-confirm-at-point)
     ("d" "Discard run" spacelift-run-discard-at-point)
@@ -385,7 +385,7 @@ Width and alignment flags (e.g. %-12s) are supported."
     ("W" "List worker pools" spacelift-worker-pool-list-pools)]
    ["Act"
     ("w" "Browse run URL" spacelift-run-browse)
-    ("y" "Copy URL" spacelift-run-copy-url)
+    ("Y" "Copy URL" spacelift-run-copy-url)
     ("l" "View logs" spacelift-run-logs)
     ("c" "Confirm run" spacelift-run-confirm-at-point)
     ("d" "Discard run" spacelift-run-discard-at-point)
@@ -403,7 +403,7 @@ Width and alignment flags (e.g. %-12s) are supported."
     ("W" "List worker pools" spacelift-worker-pool-list-pools)]
    ["Act"
     ("w" "Browse in console" spacelift-run-log-browse)
-    ("y" "Copy URL" spacelift-run-log-copy-url)
+    ("Y" "Copy URL" spacelift-run-log-copy-url)
     ("t" "Retry run" spacelift-run-log-retry)
     ("P" "Prioritize run" spacelift-run-prioritize-at-point)
     ("r" "Reload logs" spacelift-run-log-refresh)
@@ -422,7 +422,7 @@ Width and alignment flags (e.g. %-12s) are supported."
     ("k" "Previous line" previous-line :transient t)]
    ["Act"
     ("w" "Browse in console" spacelift-worker-pool-list-browse)
-    ("y" "Copy URL" spacelift-worker-pool-list-copy-url)
+    ("Y" "Copy URL" spacelift-worker-pool-list-copy-url)
     ("r" "Reload" spacelift-worker-pool-list-refresh)]
    ["Window"
     ("q" "Quit window" quit-window)
@@ -435,7 +435,7 @@ Width and alignment flags (e.g. %-12s) are supported."
     ("Q" "List queue" spacelift-worker-list-queue)]
    ["Act"
     ("w" "Browse pool in console" spacelift-worker-list-browse)
-    ("y" "Copy pool URL" spacelift-worker-list-copy-url)
+    ("Y" "Copy pool URL" spacelift-worker-list-copy-url)
     ("r" "Reload" spacelift-worker-list-refresh)]
    ["Window"
     ("q" "Quit window" quit-window)
@@ -451,7 +451,7 @@ Width and alignment flags (e.g. %-12s) are supported."
    ["Act"
     ("l" "View run logs" spacelift-worker-queue-logs)
     ("w" "Browse run URL" spacelift-worker-queue-browse)
-    ("y" "Copy run URL" spacelift-worker-queue-copy-url)
+    ("Y" "Copy run URL" spacelift-worker-queue-copy-url)
     ("r" "Reload" spacelift-worker-queue-refresh)]
    ["Window"
     ("q" "Quit window" quit-window)
@@ -481,7 +481,7 @@ Width and alignment flags (e.g. %-12s) are supported."
     (define-key map (kbd "L") #'spacelift-stack-list-runs)
     (define-key map (kbd "W") #'spacelift-worker-pool-list-pools)
     (define-key map (kbd "w") #'spacelift-stack-list-browse)
-    (define-key map (kbd "y") #'spacelift-stack-list-copy-url)
+    (define-key map (kbd "Y") #'spacelift-stack-list-copy-url)
     (define-key map (kbd "l") #'spacelift-stack-list-latest-logs)
     (define-key map (kbd "c") #'spacelift-stack-list-confirm)
     (define-key map (kbd "d") #'spacelift-stack-list-discard)
@@ -746,7 +746,7 @@ When `spacectl' is not authenticated, offer to log in instead."
     (define-key map (kbd "L") #'spacelift-stack-runs)
     (define-key map (kbd "W") #'spacelift-worker-pool-list-pools)
     (define-key map (kbd "w") #'spacelift-stack-browse)
-    (define-key map (kbd "y") #'spacelift-stack-copy-url)
+    (define-key map (kbd "Y") #'spacelift-stack-copy-url)
     (define-key map (kbd "l") #'spacelift-stack-latest-logs)
     (define-key map (kbd "c") #'spacelift-stack-confirm)
     (define-key map (kbd "d") #'spacelift-stack-discard)
@@ -975,7 +975,7 @@ When `spacectl' is not authenticated, offer to log in instead."
     (define-key map (kbd "RET") #'spacelift-run-list-visit)
     (define-key map (kbd "W") #'spacelift-worker-pool-list-pools)
     (define-key map (kbd "w") #'spacelift-run-browse)
-    (define-key map (kbd "y") #'spacelift-run-copy-url)
+    (define-key map (kbd "Y") #'spacelift-run-copy-url)
     (define-key map (kbd "l") #'spacelift-run-logs)
     (define-key map (kbd "c") #'spacelift-run-confirm-at-point)
     (define-key map (kbd "d") #'spacelift-run-discard-at-point)
@@ -1066,7 +1066,7 @@ When `spacectl' is not authenticated, offer to log in instead."
   (let ((map (make-sparse-keymap)))
     (define-key map (kbd "W") #'spacelift-worker-pool-list-pools)
     (define-key map (kbd "w") #'spacelift-run-browse)
-    (define-key map (kbd "y") #'spacelift-run-copy-url)
+    (define-key map (kbd "Y") #'spacelift-run-copy-url)
     (define-key map (kbd "l") #'spacelift-run-logs)
     (define-key map (kbd "c") #'spacelift-run-confirm-at-point)
     (define-key map (kbd "d") #'spacelift-run-discard-at-point)
@@ -1287,7 +1287,7 @@ Nil when the buffer streams the stack's latest run via `--run-latest'.")
   (let ((map (make-sparse-keymap)))
     (define-key map (kbd "W") #'spacelift-worker-pool-list-pools)
     (define-key map (kbd "w") #'spacelift-run-log-browse)
-    (define-key map (kbd "y") #'spacelift-run-log-copy-url)
+    (define-key map (kbd "Y") #'spacelift-run-log-copy-url)
     (define-key map (kbd "t") #'spacelift-run-log-retry)
     (define-key map (kbd "d") #'spacelift-run-discard-at-point)
     (define-key map (kbd "P") #'spacelift-run-prioritize-at-point)
@@ -1479,7 +1479,7 @@ run detail buffer, or the run of the current log buffer."
     (define-key map (kbd "RET") #'spacelift-worker-pool-list-workers)
     (define-key map (kbd "Q") #'spacelift-worker-pool-list-queue)
     (define-key map (kbd "w") #'spacelift-worker-pool-list-browse)
-    (define-key map (kbd "y") #'spacelift-worker-pool-list-copy-url)
+    (define-key map (kbd "Y") #'spacelift-worker-pool-list-copy-url)
     (define-key map (kbd "r") #'spacelift-worker-pool-list-refresh)
     (define-key map (kbd "g") #'spacelift-worker-pool-list-refresh)
     (define-key map (kbd "q") #'quit-window)
@@ -1591,7 +1591,7 @@ When `spacectl' is not authenticated, offer to log in instead."
   (let ((map (make-sparse-keymap)))
     (define-key map (kbd "Q") #'spacelift-worker-list-queue)
     (define-key map (kbd "w") #'spacelift-worker-list-browse)
-    (define-key map (kbd "y") #'spacelift-worker-list-copy-url)
+    (define-key map (kbd "Y") #'spacelift-worker-list-copy-url)
     (define-key map (kbd "r") #'spacelift-worker-list-refresh)
     (define-key map (kbd "g") #'spacelift-worker-list-refresh)
     (define-key map (kbd "q") #'quit-window)
@@ -1692,7 +1692,7 @@ When `spacectl' is not authenticated, offer to log in instead."
     (define-key map (kbd "RET") #'spacelift-worker-queue-visit)
     (define-key map (kbd "l") #'spacelift-worker-queue-logs)
     (define-key map (kbd "w") #'spacelift-worker-queue-browse)
-    (define-key map (kbd "y") #'spacelift-worker-queue-copy-url)
+    (define-key map (kbd "Y") #'spacelift-worker-queue-copy-url)
     (define-key map (kbd "r") #'spacelift-worker-queue-refresh)
     (define-key map (kbd "g") #'spacelift-worker-queue-refresh)
     (define-key map (kbd "q") #'quit-window)
@@ -1815,7 +1815,7 @@ When `spacectl' is not authenticated, offer to log in instead."
     (evil-define-key* '(motion normal) spacelift-run-list-mode-map
       (kbd "RET") #'spacelift-run-list-visit
       "w" #'spacelift-run-browse
-      "y" #'spacelift-run-copy-url
+      "Y" #'spacelift-run-copy-url
       "l" #'spacelift-run-logs
       "c" #'spacelift-run-confirm-at-point
       "d" #'spacelift-run-discard-at-point
@@ -1826,7 +1826,7 @@ When `spacectl' is not authenticated, offer to log in instead."
       "?" #'spacelift-help)
     (evil-define-key* '(motion normal) spacelift-run-mode-map
       "w" #'spacelift-run-browse
-      "y" #'spacelift-run-copy-url
+      "Y" #'spacelift-run-copy-url
       "l" #'spacelift-run-logs
       "c" #'spacelift-run-confirm-at-point
       "d" #'spacelift-run-discard-at-point
@@ -1837,7 +1837,7 @@ When `spacectl' is not authenticated, offer to log in instead."
       "?" #'spacelift-help)
     (evil-define-key* '(motion normal) spacelift-run-log-mode-map
       "w" #'spacelift-run-log-browse
-      "y" #'spacelift-run-log-copy-url
+      "Y" #'spacelift-run-log-copy-url
       "t" #'spacelift-run-log-retry
       "d" #'spacelift-run-discard-at-point
       "P" #'spacelift-run-prioritize-at-point
@@ -1848,7 +1848,7 @@ When `spacectl' is not authenticated, offer to log in instead."
     (evil-define-key* '(motion normal) spacelift-stack-list-mode-map
       "L" #'spacelift-stack-list-runs
       "w" #'spacelift-stack-list-browse
-      "y" #'spacelift-stack-list-copy-url
+      "Y" #'spacelift-stack-list-copy-url
       "l" #'spacelift-stack-list-latest-logs
       "c" #'spacelift-stack-list-confirm
       "d" #'spacelift-stack-list-discard
@@ -1858,7 +1858,7 @@ When `spacectl' is not authenticated, offer to log in instead."
     (evil-define-key* '(motion normal) spacelift-stack-mode-map
       "R" #'spacelift-stack-runs
       "w" #'spacelift-stack-browse
-      "y" #'spacelift-stack-copy-url
+      "Y" #'spacelift-stack-copy-url
       "l" #'spacelift-stack-latest-logs
       "c" #'spacelift-stack-confirm
       "d" #'spacelift-stack-discard
@@ -1868,14 +1868,14 @@ When `spacectl' is not authenticated, offer to log in instead."
       (kbd "RET") #'spacelift-worker-pool-list-workers
       "Q" #'spacelift-worker-pool-list-queue
       "w" #'spacelift-worker-pool-list-browse
-      "y" #'spacelift-worker-pool-list-copy-url
+      "Y" #'spacelift-worker-pool-list-copy-url
       "r" #'spacelift-worker-pool-list-refresh
       "q" #'quit-window
       "?" #'spacelift-help)
     (evil-define-key* '(motion normal) spacelift-worker-list-mode-map
       "Q" #'spacelift-worker-list-queue
       "w" #'spacelift-worker-list-browse
-      "y" #'spacelift-worker-list-copy-url
+      "Y" #'spacelift-worker-list-copy-url
       "r" #'spacelift-worker-list-refresh
       "q" #'quit-window
       "?" #'spacelift-help)
@@ -1883,7 +1883,7 @@ When `spacectl' is not authenticated, offer to log in instead."
       (kbd "RET") #'spacelift-worker-queue-visit
       "l" #'spacelift-worker-queue-logs
       "w" #'spacelift-worker-queue-browse
-      "y" #'spacelift-worker-queue-copy-url
+      "Y" #'spacelift-worker-queue-copy-url
       "r" #'spacelift-worker-queue-refresh
       "q" #'quit-window
       "?" #'spacelift-help)))
