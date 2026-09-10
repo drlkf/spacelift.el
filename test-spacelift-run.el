@@ -106,6 +106,27 @@
                 ((symbol-function 'spacelift-run-retry)
                  (lambda (value) (setq retried value))))
         (spacelift-run-log-retry)
+         (should (eq retried run))))))
+
+(ert-deftest spacelift-run-log-no-confirm-keys-are-bound ()
+  (should (eq (lookup-key spacelift-run-log-mode-map (kbd "C"))
+              #'spacelift-run-confirm-at-point-no-confirm))
+  (should (eq (lookup-key spacelift-run-log-mode-map (kbd "T"))
+              #'spacelift-run-log-retry-no-confirm)))
+
+(ert-deftest spacelift-run-log-retry-no-confirm-skips-prompt ()
+  (let ((run (spacelift-run-create :id "run-1" :stack-id "stack-1"))
+        prompted retried)
+    (with-temp-buffer
+      (spacelift-run-log-mode)
+      (setq spacelift--log-stack-id "stack-1"
+            spacelift--log-run run)
+      (cl-letf (((symbol-function 'yes-or-no-p)
+                 (lambda (&rest _) (setq prompted t)))
+                ((symbol-function 'spacelift-run-retry)
+                 (lambda (value) (setq retried value))))
+        (spacelift-run-log-retry-no-confirm)
+        (should-not prompted)
         (should (eq retried run))))))
 
 (ert-deftest spacelift-stack-list-uppercase-t-retries-without-confirmation ()

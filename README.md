@@ -88,6 +88,9 @@ Run log buffers:
 | `w`   | Browse the run URL in the Spacelift console |
 | `y`   | Copy the run/stack Spacelift console URL to the kill ring |
 | `t`   | Retry the run (asks first) |
+| `T`   | Retry the run without confirmation |
+| `c`   | Confirm an unconfirmed run (asks first) |
+| `C`   | Confirm an unconfirmed run without confirmation |
 | `d`   | Discard the run (asks first) |
 | `P`   | Prioritize the run (`C-u P` to deprioritize; asks first) |
 | `q`   | Stop the log process and quit the window |
