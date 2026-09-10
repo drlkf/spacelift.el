@@ -54,6 +54,23 @@
                (lambda (&optional _) "User Name")))
       (should (spacelift-run-owned-p run)))))
 
+(ert-deftest spacelift-stack-list-next-owned-unconfirmed-wraps ()
+  (let ((owned (spacelift-stack-create
+                :id "owned" :blocker-id "run-1" :blocker-state "UNCONFIRMED"
+                :blocker-commit (spacelift-commit-create :login "me")))
+        (other (spacelift-stack-create
+                :id "other" :blocker-id "run-2" :blocker-state "UNCONFIRMED"
+                :blocker-commit (spacelift-commit-create :login "someone-else"))))
+    (with-temp-buffer
+      (let ((spacelift-vcs-login "me"))
+        (spacelift-stack-list-mode)
+        (let ((inhibit-read-only t))
+          (insert (propertize "owned\n" 'spacelift-stack owned)
+                  (propertize "other\n" 'spacelift-stack other)))
+        (goto-char (point-max))
+        (spacelift-stack-list-next-owned-unconfirmed)
+        (should (eq (spacelift-stack-list-stack-at-point) owned))))))
+
 (ert-deftest spacelift-stack-line-owned-unconfirmed-run-uses-dedicated-face ()
   (let ((stack (spacelift-stack-create
                 :id "stack-1"

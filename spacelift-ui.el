@@ -340,9 +340,10 @@ Width and alignment flags (e.g. %-12s) are supported."
   ["Spacelift stacks"
    ["Navigate"
     ("RET" "Visit stack" spacelift-stack-list-visit)
-    ("j" "Next line" next-line :transient t)
-    ("k" "Previous line" previous-line :transient t)
-    ("L" "List runs" spacelift-stack-list-runs)
+     ("j" "Next line" next-line :transient t)
+     ("k" "Previous line" previous-line :transient t)
+     ("." "Next own unconfirmed stack" spacelift-stack-list-next-owned-unconfirmed :transient t)
+     ("L" "List runs" spacelift-stack-list-runs)
     ("W" "List worker pools" spacelift-worker-pool-list-pools)]
    ["Act"
     ("w" "Browse in console" spacelift-stack-list-browse)
@@ -386,7 +387,7 @@ Width and alignment flags (e.g. %-12s) are supported."
     ("RET" "Visit run" spacelift-run-list-visit)
     ("j" "Next line" next-line :transient t)
     ("k" "Previous line" previous-line :transient t)
-    ("W" "List worker pools" spacelift-worker-pool-list-pools)]
+     ("W" "List worker pools" spacelift-worker-pool-list-pools)]
    ["Act"
     ("w" "Browse run URL" spacelift-run-browse)
     ("Y" "Copy URL" spacelift-run-copy-url)
@@ -520,6 +521,7 @@ Width and alignment flags (e.g. %-12s) are supported."
     (define-key map (kbd "p") #'previous-line)
     (define-key map (kbd "j") #'next-line)
     (define-key map (kbd "k") #'previous-line)
+    (define-key map (kbd ".") #'spacelift-stack-list-next-owned-unconfirmed)
     map)
   "Keymap for `spacelift-stack-list-mode'.")
 
@@ -581,6 +583,34 @@ Non-successful stacks are those whose displayed state is not FINISHED."
 (defun spacelift-stack-list-stack-at-point ()
   "Return the `spacelift-stack' on the current line, or nil."
   (get-text-property (line-beginning-position) 'spacelift-stack))
+
+(defun spacelift-stack-list-next-owned-unconfirmed ()
+  "Move to the next stack with an owned unconfirmed blocking run."
+  (interactive)
+  (let ((start (point))
+        match)
+    (goto-char (point-min))
+    (while (and (not match) (< (point) (point-max)))
+      (let* ((stack (spacelift-stack-list-stack-at-point))
+             (run (and stack (spacelift-stack--blocker-run stack))))
+        (when (and run (equal (spacelift-run-state run) "UNCONFIRMED")
+                   (spacelift-run-owned-p run)
+                   (> (point) start))
+          (setq match (point))))
+      (forward-line 1))
+    (unless match
+      (goto-char (point-min))
+      (while (and (not match) (< (point) start))
+        (let* ((stack (spacelift-stack-list-stack-at-point))
+               (run (and stack (spacelift-stack--blocker-run stack))))
+          (when (and run (equal (spacelift-run-state run) "UNCONFIRMED")
+                     (spacelift-run-owned-p run))
+            (setq match (point))))
+        (forward-line 1)))
+    (if match
+        (goto-char match)
+      (goto-char start)
+      (user-error "No owned unconfirmed stack"))))
 
 (defun spacelift-stack-list-visit ()
   "Open the detail buffer for the stack on the current line."
@@ -1864,7 +1894,7 @@ When `spacectl' is not authenticated, offer to log in instead."
       "d" #'spacelift-run-discard-at-point
       "t" #'spacelift-run-retry-at-point
       "P" #'spacelift-run-prioritize-at-point
-      "r" #'spacelift-run-list-refresh
+       "r" #'spacelift-run-list-refresh
       "q" #'quit-window
       "?" #'spacelift-help)
     (evil-define-key* '(motion normal) spacelift-run-mode-map
@@ -1898,8 +1928,9 @@ When `spacectl' is not authenticated, offer to log in instead."
       "d" #'spacelift-stack-list-discard
        "t" #'spacelift-stack-list-retry
        "T" #'spacelift-stack-list-retry-no-confirm
-      "P" #'spacelift-stack-list-prioritize
-      "f" #'spacelift-stack-list-toggle-unsuccessful)
+       "P" #'spacelift-stack-list-prioritize
+       "." #'spacelift-stack-list-next-owned-unconfirmed
+       "f" #'spacelift-stack-list-toggle-unsuccessful)
     (evil-define-key* '(motion normal) spacelift-stack-mode-map
       "R" #'spacelift-stack-runs
       "w" #'spacelift-stack-browse

@@ -57,6 +57,7 @@ Stack list and stack detail buffers:
 | `t`   | Retry the stack's current run (blocking run when blocked, else latest; asks first) |
 | `T`   | Retry the stack's current run without confirmation |
 | `P`   | Prioritize the stack's current run (`C-u P` to deprioritize; asks first) |
+| `.`   | Jump to your next stack with an owned unconfirmed run (list buffer only) |
 | `j`/`k`, `n`/`p` | Move down/up (list buffer) |
 
 Run list and run detail buffers:
