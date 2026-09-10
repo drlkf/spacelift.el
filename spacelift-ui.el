@@ -347,8 +347,9 @@ Width and alignment flags (e.g. %-12s) are supported."
    ["Act"
     ("w" "Browse in console" spacelift-stack-list-browse)
     ("Y" "Copy URL" spacelift-stack-list-copy-url)
-    ("l" "View current run logs" spacelift-stack-list-latest-logs)
-    ("c" "Confirm current run" spacelift-stack-list-confirm)
+     ("l" "View current run logs" spacelift-stack-list-latest-logs)
+     ("c" "Confirm current run" spacelift-stack-list-confirm)
+     ("C" "Confirm current run (no confirm)" spacelift-stack-list-confirm-no-confirm)
      ("d" "Discard current run" spacelift-stack-list-discard)
      ("t" "Retry current run" spacelift-stack-list-retry)
      ("T" "Retry current run (no confirm)" spacelift-stack-list-retry-no-confirm)
@@ -503,8 +504,9 @@ Width and alignment flags (e.g. %-12s) are supported."
     (define-key map (kbd "W") #'spacelift-worker-pool-list-pools)
     (define-key map (kbd "w") #'spacelift-stack-list-browse)
     (define-key map (kbd "Y") #'spacelift-stack-list-copy-url)
-    (define-key map (kbd "l") #'spacelift-stack-list-latest-logs)
-    (define-key map (kbd "c") #'spacelift-stack-list-confirm)
+     (define-key map (kbd "l") #'spacelift-stack-list-latest-logs)
+     (define-key map (kbd "c") #'spacelift-stack-list-confirm)
+     (define-key map (kbd "C") #'spacelift-stack-list-confirm-no-confirm)
     (define-key map (kbd "d") #'spacelift-stack-list-discard)
      (define-key map (kbd "t") #'spacelift-stack-list-retry)
      (define-key map (kbd "T") #'spacelift-stack-list-retry-no-confirm)
@@ -634,12 +636,13 @@ faster `--run-latest' path."
       (spacelift-run-show-logs (spacelift-stack-current-run stack) tail)
     (spacelift-stack-show-latest-logs (spacelift-stack-id stack) tail)))
 
-(defun spacelift--confirm-stack-current-run (stack)
+(defun spacelift--confirm-stack-current-run (stack &optional no-confirm)
   "Confirm STACK's current run when it is awaiting confirmation.
 The current run is the run displayed on the stack line: the blocking run
 when STACK is blocked, otherwise its latest run.  It must be in the
 UNCONFIRMED state.  Confirming is a write operation, so it asks for
-confirmation first.  Return non-nil when a run was confirmed."
+  confirmation first unless NO-CONFIRM is non-nil.  Return non-nil when a run
+  was confirmed."
   (spacelift-with-auth
     (let ((run (spacelift-stack-current-run stack))
           (stack-id (spacelift-stack-id stack)))
@@ -651,7 +654,8 @@ confirmation first.  Return non-nil when a run was confirmed."
           (user-error
            "Run %s of stack %s is not awaiting confirmation (state: %s)"
            id stack-id (or state "unknown")))
-        (when (yes-or-no-p (format "Confirm run %s of stack %s? " id stack-id))
+        (when (or no-confirm
+                  (yes-or-no-p (format "Confirm run %s of stack %s? " id stack-id)))
           (spacelift-run-confirm run)
           (message "Confirmed run %s" id)
           t)))))
@@ -659,11 +663,19 @@ confirmation first.  Return non-nil when a run was confirmed."
 (defun spacelift-stack-list-confirm ()
   "Confirm the current run of the stack on the current line."
   (interactive)
+  (spacelift-stack-list-confirm-internal nil))
+
+(defun spacelift-stack-list-confirm-internal (no-confirm)
   (let ((stack (spacelift-stack-list-stack-at-point)))
     (unless stack
       (user-error "No stack on this line"))
-    (when (spacelift--confirm-stack-current-run stack)
+    (when (spacelift--confirm-stack-current-run stack no-confirm)
       (spacelift-stack-list-refresh))))
+
+(defun spacelift-stack-list-confirm-no-confirm ()
+  "Confirm the current run of the stack on the current line without confirmation."
+  (interactive)
+  (spacelift-stack-list-confirm-internal t))
 
 (defun spacelift--discard-stack-current-run (stack)
   "Discard STACK's current run when it is awaiting confirmation."
@@ -1880,8 +1892,9 @@ When `spacectl' is not authenticated, offer to log in instead."
       "L" #'spacelift-stack-list-runs
       "w" #'spacelift-stack-list-browse
       "Y" #'spacelift-stack-list-copy-url
-      "l" #'spacelift-stack-list-latest-logs
-      "c" #'spacelift-stack-list-confirm
+       "l" #'spacelift-stack-list-latest-logs
+       "c" #'spacelift-stack-list-confirm
+       "C" #'spacelift-stack-list-confirm-no-confirm
       "d" #'spacelift-stack-list-discard
        "t" #'spacelift-stack-list-retry
        "T" #'spacelift-stack-list-retry-no-confirm

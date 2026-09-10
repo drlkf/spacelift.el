@@ -52,6 +52,7 @@ Stack list and stack detail buffers:
 | `y`   | Copy the stack's Spacelift console URL to the kill ring |
 | `l`   | View the stack's current run logs (blocking run when blocked, else latest; `C-u l` to follow/tail) |
 | `c`   | Confirm the stack's current run if unconfirmed (blocking run when blocked, else latest; asks first) |
+| `C`   | Confirm the stack's current run without confirmation |
 | `d`   | Discard the stack's current run if unconfirmed (blocking run when blocked, else latest; asks first) |
 | `t`   | Retry the stack's current run (blocking run when blocked, else latest; asks first) |
 | `T`   | Retry the stack's current run without confirmation |
