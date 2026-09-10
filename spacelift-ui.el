@@ -349,8 +349,9 @@ Width and alignment flags (e.g. %-12s) are supported."
     ("Y" "Copy URL" spacelift-stack-list-copy-url)
     ("l" "View current run logs" spacelift-stack-list-latest-logs)
     ("c" "Confirm current run" spacelift-stack-list-confirm)
-    ("d" "Discard current run" spacelift-stack-list-discard)
-    ("t" "Retry current run" spacelift-stack-list-retry)
+     ("d" "Discard current run" spacelift-stack-list-discard)
+     ("t" "Retry current run" spacelift-stack-list-retry)
+     ("T" "Retry current run (no confirm)" spacelift-stack-list-retry-no-confirm)
     ("P" "Prioritize current run" spacelift-stack-list-prioritize)
     ("f" "Toggle non-successful only" spacelift-stack-list-toggle-unsuccessful)
     ("r" "Reload" spacelift-stack-list-refresh)]
@@ -505,7 +506,8 @@ Width and alignment flags (e.g. %-12s) are supported."
     (define-key map (kbd "l") #'spacelift-stack-list-latest-logs)
     (define-key map (kbd "c") #'spacelift-stack-list-confirm)
     (define-key map (kbd "d") #'spacelift-stack-list-discard)
-    (define-key map (kbd "t") #'spacelift-stack-list-retry)
+     (define-key map (kbd "t") #'spacelift-stack-list-retry)
+     (define-key map (kbd "T") #'spacelift-stack-list-retry-no-confirm)
     (define-key map (kbd "P") #'spacelift-stack-list-prioritize)
     (define-key map (kbd "f") #'spacelift-stack-list-toggle-unsuccessful)
     (define-key map (kbd "r") #'spacelift-stack-list-refresh)
@@ -689,19 +691,20 @@ confirmation first.  Return non-nil when a run was confirmed."
     (when (spacelift--discard-stack-current-run stack)
       (spacelift-stack-list-refresh))))
 
-(defun spacelift--retry-stack-current-run (stack)
+(defun spacelift--retry-stack-current-run (stack &optional no-confirm)
   "Retry STACK's current run.
 The current run is the run displayed on the stack line: the blocking run
 when STACK is blocked, otherwise its latest run.  Retrying is a write
-operation, so it asks for confirmation first.  Return non-nil when a run
-was retried."
+  operation, so it asks for confirmation first unless NO-CONFIRM is non-nil.
+  Return non-nil when a run was retried."
   (spacelift-with-auth
     (let ((run (spacelift-stack-current-run stack))
           (stack-id (spacelift-stack-id stack)))
       (unless run
         (user-error "Stack %s has no runs" stack-id))
       (let ((id (spacelift-run-id run)))
-        (when (yes-or-no-p (format "Retry run %s of stack %s? " id stack-id))
+        (when (or no-confirm
+                  (yes-or-no-p (format "Retry run %s of stack %s? " id stack-id)))
           (spacelift-run-retry run)
           (message "Retried run %s" id)
           t)))))
@@ -709,11 +712,19 @@ was retried."
 (defun spacelift-stack-list-retry ()
   "Retry the current run of the stack on the current line."
   (interactive)
+  (spacelift-stack-list-retry-internal nil))
+
+(defun spacelift-stack-list-retry-internal (no-confirm)
   (let ((stack (spacelift-stack-list-stack-at-point)))
     (unless stack
       (user-error "No stack on this line"))
-    (when (spacelift--retry-stack-current-run stack)
+    (when (spacelift--retry-stack-current-run stack no-confirm)
       (spacelift-stack-list-refresh))))
+
+(defun spacelift-stack-list-retry-no-confirm ()
+  "Retry the current run of the stack on the current line without confirmation."
+  (interactive)
+  (spacelift-stack-list-retry-internal t))
 
 (defun spacelift--prioritize-stack-current-run (stack &optional deprioritize)
   "Prioritize STACK's current run, or deprioritize it when requested."
@@ -1872,7 +1883,8 @@ When `spacectl' is not authenticated, offer to log in instead."
       "l" #'spacelift-stack-list-latest-logs
       "c" #'spacelift-stack-list-confirm
       "d" #'spacelift-stack-list-discard
-      "t" #'spacelift-stack-list-retry
+       "t" #'spacelift-stack-list-retry
+       "T" #'spacelift-stack-list-retry-no-confirm
       "P" #'spacelift-stack-list-prioritize
       "f" #'spacelift-stack-list-toggle-unsuccessful)
     (evil-define-key* '(motion normal) spacelift-stack-mode-map

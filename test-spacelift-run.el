@@ -91,6 +91,17 @@
         (spacelift-run-log-retry)
         (should (eq retried run))))))
 
+(ert-deftest spacelift-stack-list-uppercase-t-retries-without-confirmation ()
+  (let (argument)
+    (cl-letf (((symbol-function 'spacelift-stack-list-stack-at-point)
+               (lambda () 'stack))
+              ((symbol-function 'spacelift--retry-stack-current-run)
+               (lambda (_ no-confirm)
+                 (setq argument no-confirm)
+                 nil)))
+      (spacelift-stack-list-retry-no-confirm)
+      (should argument))))
+
 (ert-deftest spacelift-run-log-targets-its-run-for-prioritization ()
   (let ((run (spacelift-run-create :id "run-1" :stack-id "stack-1")))
     (with-temp-buffer
