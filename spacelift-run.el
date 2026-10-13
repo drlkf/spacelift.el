@@ -34,6 +34,7 @@
 ;;; Code:
 
 (require 'cl-lib)
+(require 'ansi-color)
 (require 'spacelift-core)
 (require 'spacelift-stack)
 
@@ -193,6 +194,130 @@ when non-nil, restricts the logs to a single run phase (for example
 When TAIL is non-nil, keep following the run.  PHASE, when non-nil,
 restricts the logs to a single run phase."
   (spacelift--run-logs-process stack-id nil buffer tail phase))
+
+;;; Plan diff
+
+(defconst spacelift-run--plan-header-regexp
+  "^ *\\(?:[-+~>]\\{1,2\\} ?\\)?[^ ]+: (\\([a-z-]+\\))"
+  "Regexp matching a Pulumi preview resource block header line.
+Match group 1 is the operation, e.g. \"update\" or \"same\"; trailing
+text after the closing paren (e.g. a lock emoji) is ignored.")
+
+(defvar spacelift-run--plan-diff-cache (make-hash-table :test #'equal)
+  "Cache of `spacelift-run--build-plan-diff' results keyed by run id.")
+
+(defun spacelift-run-plan-log (run &optional phase)
+  "Return RUN's PHASE log, synchronously, ANSI codes stripped.
+PHASE defaults to \"PLANNING\"."
+  (ansi-color-filter-apply
+   (spacelift--run "stack" "logs"
+                   "--id" (spacelift-run-stack-id run)
+                   "--run" (spacelift-run-id run)
+                   "--phase" (or phase "PLANNING"))))
+
+(defun spacelift-run-failed-phase (run)
+  "Return the run phase following the FAILED entry in RUN's history.
+History is newest-first, so this is the phase that was running when
+RUN failed.  Return nil when RUN's history has no FAILED entry."
+  (let* ((data (spacelift--run-graphql
+                "query($s: ID!, $r: ID!) { stack(id: $s) { run(id: $r) { history { state } } } }"
+                `((s . ,(spacelift-run-stack-id run))
+                  (r . ,(spacelift-run-id run)))))
+         (history (alist-get 'history (alist-get 'run (alist-get 'stack data))))
+         (rest (cl-member-if (lambda (entry) (equal (alist-get 'state entry) "FAILED"))
+                             history)))
+    (and rest (cadr rest) (alist-get 'state (cadr rest)))))
+
+(defun spacelift-run--strip-color-tags (line)
+  "Remove Pulumi `<{%...%}>' color tags from LINE."
+  (replace-regexp-in-string "<{%[^%]*%}>" "" line))
+
+(defun spacelift-run--parse-plan-summary (lines)
+  "Return the \"Resources:\" summary block from LINES as `(summary . TEXT)'."
+  (let ((rest (cl-member-if (lambda (line) (string-prefix-p "Resources:" line))
+                            lines))
+        (result nil)
+        (done nil))
+    (while (and rest (not done))
+      (if (string-empty-p (string-trim (car rest)))
+          (setq done t)
+        (push (cons 'summary (car rest)) result)
+        (setq rest (cdr rest))))
+    (nreverse result)))
+
+;; shortcut: Pulumi preview format only, extend when Terraform stacks appear
+(defun spacelift-run--parse-plan-diff (log)
+  "Return the list of non-trivial entries parsed from LOG.
+LOG is the raw text of a phase log with ANSI codes already stripped.
+Each entry is `(KIND . TEXT)' with KIND one of `diff', `error', or
+`summary'.  Resource blocks whose operation is \"same\", \"read\", or
+\"refresh\" are dropped; the rest are kept as `diff' entries, verbatim
+except their `[urn=...]' and `[provider=...]' lines, which add noise
+without changing what review needs.  Lines starting with \"error:\" and
+their continuation lines become `error' entries.  The final
+\"Resources:\" block is appended as `summary' entries when present,
+regardless of whether any other entry was kept."
+  (let ((lines (mapcar #'spacelift-run--strip-color-tags (split-string log "\n")))
+        (result nil)
+        (diff-collecting nil)
+        (error-collecting nil))
+    (dolist (line lines)
+      (cond
+       ((string-match spacelift-run--plan-header-regexp line)
+        (setq error-collecting nil
+              diff-collecting (not (member (match-string 1 line)
+                                           '("same" "read" "refresh"))))
+        (when diff-collecting
+          (push (cons 'diff line) result)))
+       ((string-match-p "^error:" line)
+        (setq diff-collecting nil
+              error-collecting t)
+        (push (cons 'error line) result))
+       (error-collecting
+        (if (or (string-empty-p (string-trim line))
+                (string-prefix-p "Resources:" line))
+            (setq error-collecting nil)
+          (push (cons 'error line) result)))
+       (diff-collecting
+        (cond
+         ((or (string-empty-p (string-trim line))
+              (string-prefix-p "@ " line)
+              (string-prefix-p "Resources:" line)
+              (not (string-prefix-p " " line)))
+          (setq diff-collecting nil))
+         ((string-match-p "^ *\\[\\(urn\\|provider\\)=" line) nil)
+         (t (push (cons 'diff line) result))))))
+    (append (nreverse result) (spacelift-run--parse-plan-summary lines))))
+
+(defun spacelift-run--last-lines-as-errors (log n)
+  "Return the last N non-blank lines of LOG as `(error . TEXT)' entries."
+  (let* ((lines (cl-remove-if (lambda (l) (string-empty-p (string-trim l)))
+                              (mapcar #'spacelift-run--strip-color-tags
+                                      (split-string log "\n")))))
+    (mapcar (lambda (l) (cons 'error l)) (last lines n))))
+
+(defun spacelift-run--build-plan-diff (run)
+  "Build the plan diff entries for RUN; see `spacelift-run-plan-diff'."
+  (if (equal (spacelift-run-state run) "FAILED")
+      (let* ((phase (or (spacelift-run-failed-phase run) "PLANNING"))
+             (log (spacelift-run-plan-log run phase))
+             (entries (spacelift-run--parse-plan-diff log)))
+        (cons (cons 'error (format "Failed during %s" phase))
+              (if (cl-some (lambda (e) (eq (car e) 'error)) entries)
+                  entries
+                (append entries (spacelift-run--last-lines-as-errors log 20)))))
+    (spacelift-run--parse-plan-diff (spacelift-run-plan-log run))))
+
+(defun spacelift-run-plan-diff (run)
+  "Return the parsed plan diff entries for RUN, caching per run id.
+When RUN's state is \"FAILED\", the log of the phase that failed is
+parsed instead of the PLANNING log (falling back to PLANNING when the
+failed phase is unknown), and a `(error . \"Failed during PHASE\")'
+entry is prepended."
+  (let ((id (spacelift-run-id run)))
+    (or (gethash id spacelift-run--plan-diff-cache)
+        (puthash id (spacelift-run--build-plan-diff run)
+                 spacelift-run--plan-diff-cache))))
 
 (provide 'spacelift-run)
 

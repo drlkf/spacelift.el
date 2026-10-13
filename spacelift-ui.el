@@ -33,7 +33,9 @@
 ;; - The stack list buffer (`spacelift-stack-list-mode'), one line per
 ;;   stack, formatted according to `spacelift-stack-line-format'.  Press
 ;;   RET on a stack to open its detail buffer, or `R' for its runs.  `f'
-;;   toggles showing only non-successful (not FINISHED) stacks.
+;;   toggles showing only non-successful (not FINISHED) stacks.  TAB
+;;   folds/unfolds a diff summary of the stack's current run under its
+;;   line.
 ;;
 ;; - The stack detail buffer (`spacelift-stack-mode'), showing all
 ;;   available stack information in a readable layout.
@@ -71,6 +73,7 @@
 (require 'cl-lib)
 (require 'ansi-color)
 (require 'browse-url)
+(require 'diff-mode)
 (require 'transient)
 (require 'spacelift-core)
 (require 'spacelift-stack)
@@ -343,6 +346,7 @@ Width and alignment flags (e.g. %-12s) are supported."
     ("j" "Next line" next-line :transient t)
     ("k" "Previous line" previous-line :transient t)
     ("." "Next own unconfirmed stack" spacelift-stack-list-next-owned-unconfirmed :transient t)
+    ("TAB" "Toggle diff summary" spacelift-stack-list-toggle-diff :transient t)
     ("L" "List runs" spacelift-stack-list-runs)
     ("W" "List worker pools" spacelift-worker-pool-list-pools)]
    ["Act"
@@ -525,6 +529,8 @@ Width and alignment flags (e.g. %-12s) are supported."
     (define-key map (kbd "j") #'next-line)
     (define-key map (kbd "k") #'previous-line)
     (define-key map (kbd ".") #'spacelift-stack-list-next-owned-unconfirmed)
+    (define-key map (kbd "TAB") #'spacelift-stack-list-toggle-diff)
+    (define-key map (kbd "<tab>") #'spacelift-stack-list-toggle-diff)
     map)
   "Keymap for `spacelift-stack-list-mode'.")
 
@@ -563,6 +569,7 @@ omitted."
   (interactive)
   (unless (derived-mode-p 'spacelift-stack-list-mode)
     (user-error "Not in a Spacelift stack list buffer"))
+  (clrhash spacelift-run--plan-diff-cache)
   (spacelift-with-auth
     (let ((stacks (spacelift--list-stacks))
           (line (line-number-at-pos)))
@@ -588,13 +595,16 @@ Non-successful stacks are those whose displayed state is not FINISHED."
   (get-text-property (line-beginning-position) 'spacelift-stack))
 
 (defun spacelift-stack-list-next-owned-unconfirmed ()
-  "Move to the next stack with an owned unconfirmed blocking run."
+  "Move to the next stack with an owned unconfirmed blocking run.
+Folded diff lines are skipped; only stack header lines are considered."
   (interactive)
   (let ((start (point))
         match)
     (goto-char (point-min))
     (while (and (not match) (< (point) (point-max)))
-      (let* ((stack (spacelift-stack-list-stack-at-point))
+      (let* ((stack (unless (get-text-property (line-beginning-position)
+                                               'spacelift-diff)
+                      (spacelift-stack-list-stack-at-point)))
              (run (and stack (spacelift-stack--blocker-run stack))))
         (when (and run (equal (spacelift-run-state run) "UNCONFIRMED")
                    (spacelift-run-owned-p run)
@@ -604,7 +614,9 @@ Non-successful stacks are those whose displayed state is not FINISHED."
     (unless match
       (goto-char (point-min))
       (while (and (not match) (< (point) start))
-        (let* ((stack (spacelift-stack-list-stack-at-point))
+        (let* ((stack (unless (get-text-property (line-beginning-position)
+                                                  'spacelift-diff)
+                        (spacelift-stack-list-stack-at-point)))
                (run (and stack (spacelift-stack--blocker-run stack))))
           (when (and run (equal (spacelift-run-state run) "UNCONFIRMED")
                      (spacelift-run-owned-p run))
@@ -614,6 +626,70 @@ Non-successful stacks are those whose displayed state is not FINISHED."
         (goto-char match)
       (goto-char start)
       (user-error "No owned unconfirmed stack"))))
+
+(defun spacelift--diff-line-face (line)
+  "Return the face for diff LINE based on its first non-space character."
+  (let* ((trimmed (string-trim-left line))
+         (char (unless (string-empty-p trimmed) (aref trimmed 0))))
+    (pcase char
+      (?+ 'diff-added)
+      (?- 'diff-removed)
+      (?~ 'diff-changed)
+      (_ 'shadow))))
+
+(defun spacelift--stack-list-remove-diff (header stack)
+  "Delete STACK's folded diff lines following marker HEADER."
+  (let ((inhibit-read-only t))
+    (goto-char header)
+    (forward-line 1)
+    (let ((start (point)))
+      (while (eq (get-text-property (line-beginning-position) 'spacelift-diff)
+                 stack)
+        (forward-line 1))
+      (delete-region start (point)))))
+
+(defun spacelift--stack-list-insert-diff (header stack)
+  "Insert STACK's current run plan diff entries after marker HEADER."
+  (let ((entries (spacelift-with-auth
+                  (let ((run (spacelift-stack-current-run stack)))
+                    (unless run
+                      (user-error "Stack %s has no runs" (spacelift-stack-id stack)))
+                    (spacelift-run-plan-diff run))))
+        (inhibit-read-only t))
+    (goto-char header)
+    (forward-line 1)
+    (if (null entries)
+        (insert (propertize "    No changes\n"
+                            'face 'shadow
+                            'spacelift-stack stack
+                            'spacelift-diff stack))
+      (dolist (entry entries)
+        (insert (propertize (concat "    " (cdr entry) "\n")
+                            'face (if (eq (car entry) 'error)
+                                      'error
+                                    (spacelift--diff-line-face (cdr entry)))
+                            'spacelift-stack stack
+                            'spacelift-diff stack))))))
+
+(defun spacelift-stack-list-toggle-diff ()
+  "Toggle a folded diff summary of the stack's current run under its line.
+Works whether point is on the stack line itself or one of its diff
+lines; point returns to the stack line afterwards."
+  (interactive)
+  (unless (derived-mode-p 'spacelift-stack-list-mode)
+    (user-error "Not in a Spacelift stack list buffer"))
+  (let ((stack (spacelift-stack-list-stack-at-point)))
+    (unless stack
+      (user-error "No stack on this line"))
+    (while (get-text-property (line-beginning-position) 'spacelift-diff)
+      (forward-line -1))
+    (let ((header (point-marker)))
+      (forward-line 1)
+      (if (eq (get-text-property (line-beginning-position) 'spacelift-diff) stack)
+          (spacelift--stack-list-remove-diff header stack)
+        (spacelift--stack-list-insert-diff header stack))
+      (goto-char header)
+      (set-marker header nil))))
 
 (defun spacelift-stack-list-visit ()
   "Open the detail buffer for the stack on the current line."
@@ -1955,7 +2031,9 @@ When `spacectl' is not authenticated, offer to log in instead."
       "T" #'spacelift-stack-list-retry-no-confirm
       "P" #'spacelift-stack-list-prioritize
       "." #'spacelift-stack-list-next-owned-unconfirmed
-      "f" #'spacelift-stack-list-toggle-unsuccessful)
+      "f" #'spacelift-stack-list-toggle-unsuccessful
+      (kbd "TAB") #'spacelift-stack-list-toggle-diff
+      (kbd "<tab>") #'spacelift-stack-list-toggle-diff)
     (evil-define-key* '(motion normal) spacelift-stack-mode-map
       "R" #'spacelift-stack-runs
       "w" #'spacelift-stack-browse

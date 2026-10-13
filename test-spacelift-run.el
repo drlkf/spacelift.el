@@ -177,3 +177,124 @@
                 (if (eq map spacelift-stack-list-mode-map)
                     #'spacelift-stack-list-prioritize
                   #'spacelift-stack-prioritize)))))
+
+(ert-deftest spacelift-run-parse-plan-diff-keeps-only-real-changes ()
+  (let* ((log (concat
+               "~ pulumi:pulumi:Stack: (refresh)\n"
+               "    [urn=urn:pulumi:test::proj::pulumi:pulumi:Stack::test]\n"
+               "  pulumi:pulumi:Stack: (same)\n"
+               "    [urn=urn:pulumi:test::proj::pulumi:pulumi:Stack::test]\n"
+               "\n"
+               "@ previewing update....\n"
+               "    > pulumi:pulumi:StackReference: (read)\n"
+               "        [id=organization/central/prod-eu1]\n"
+               "        [urn=urn:pulumi:test::proj::pulumi:pulumi:StackReference::organization/central/prod-eu1]\n"
+               "        name: \"organization/central/prod-eu1\"\n"
+               "    ~ gcp:compute/firewall:Firewall: (update)\n"
+               "        [id=projects/test/global/firewalls/allow-gcp-health-checks]\n"
+               "        [urn=urn:pulumi:test::proj::gcp:compute/firewall:Firewall::allow-gcp-health-checks]\n"
+               "        [provider=urn:pulumi:test::proj::pulumi:providers:gcp::test-gcp-provider::abc123]\n"
+               "      ~ allows: [\n"
+               "          ~ [0]: {\n"
+               "                  ~ ports: [\n"
+               "                      ~ [0]: \"8001\" => \"8002\"\n"
+               "                    ]\n"
+               "                }\n"
+               "        ]\n"
+               "    +-kubernetes:networking.gke.io/v1:HealthCheckPolicy: (replace)\n"
+               "        [id=tsuga/tsuga-cluster-intake-healthcheck]\n"
+               "        [urn=urn:pulumi:test::proj::kubernetes:networking.gke.io/v1:HealthCheckPolicy::test-intake-healthcheck]\n"
+               "        [provider=urn:pulumi:test::proj::pulumi:providers:kubernetes::test-k8s-provider::def456]\n"
+               "      ~ metadata: {\n"
+               "          ~ name: \"a\" => \"b\"\n"
+               "        }\n"
+               "\n"
+               "Resources:\n"
+               "    ~ 4 to update\n"
+               "    +-1 to replace\n"
+               "    5 changes. 423 unchanged\n"
+               "\n"
+               "Policy Packs run:\n"))
+         (result (spacelift-run--parse-plan-diff log))
+         (texts (mapcar #'cdr result)))
+    (should (cl-every (lambda (e) (eq (car e) 'diff)) (butlast result 4)))
+    (should (cl-every (lambda (e) (eq (car e) 'summary)) (last result 4)))
+    (should-not (cl-some (lambda (l) (string-match-p "(refresh)\\|(same)\\|(read)" l))
+                         texts))
+    (should-not (cl-some (lambda (l) (string-match-p "\\[urn=\\|\\[provider=" l))
+                         texts))
+    (should (cl-some (lambda (l) (string-match-p "\\[id=" l)) texts))
+    (should (cl-some (lambda (l) (string-match-p "gcp:compute/firewall:Firewall: (update)" l))
+                     texts))
+    (should (cl-some (lambda (l) (string-match-p "HealthCheckPolicy: (replace)" l))
+                     texts))
+    (should (cl-some (lambda (l) (string-match-p "^Resources:$" l)) texts))
+    (should (cl-some (lambda (l) (string-match-p "to update" l)) texts))))
+
+(ert-deftest spacelift-run-parse-plan-diff-collects-apply-errors ()
+  (let* ((log (concat
+               "    ~ azure-native:containerservice:ManagedCluster: (update) \xf0\x9f\x94\x92\n"
+               "        [id=/subscriptions/.../managedClusters/test]\n"
+               "        [urn=urn:pulumi:test::proj::azure-native:containerservice:ManagedCluster::aks]\n"
+               "        [provider=urn:pulumi:test::proj::pulumi:providers:azure-native::azure-provider::abc]\n"
+               "      ~ agentPoolProfiles: [\n"
+               "          ~ [0]: {\n"
+               "                  ~ count: 2 => 1\n"
+               "                }\n"
+               "        ]\n"
+               "error: Status=409 Code=\"OperationNotAllowed\" Message=\"{\n"
+               "  \"code\": \"OperationNotAllowed\",\n"
+               "  \"subcode\": \"AnotherOperationInProgress\"\n"
+               " }\"\n"
+               "error: update failed\n"
+               "Resources:\n"
+               "    194 unchanged\n"
+               "    <{%fg 1%}>1 errored<{%reset%}>\n"
+               "\n"
+               "Policy Packs run:\n"))
+         (result (spacelift-run--parse-plan-diff log))
+         (texts (mapcar #'cdr result))
+         (errors (seq-filter (lambda (e) (eq (car e) 'error)) result)))
+    (should (cl-some (lambda (l) (string-match-p "ManagedCluster: (update)" l)) texts))
+    (should-not (cl-some (lambda (l) (string-match-p "\\[urn=\\|\\[provider=" l)) texts))
+    (should (= (cl-count-if (lambda (e) (string-match-p "^error:" (cdr e))) errors) 2))
+    (should (cl-some (lambda (e) (string-match-p "OperationNotAllowed" (cdr e))) errors))
+    (should (cl-some (lambda (e) (string-match-p "AnotherOperationInProgress" (cdr e))) errors))
+    (should (cl-some (lambda (e) (string-match-p "update failed" (cdr e))) errors))
+    (should (cl-some (lambda (l) (string-match-p "^ *1 errored$" l)) texts))
+    (should-not (cl-some (lambda (l) (string-match-p "<{%" l)) texts))))
+
+(ert-deftest spacelift-run-plan-diff-falls-back-to-last-lines-on-failure ()
+  (clrhash spacelift-run--plan-diff-cache)
+  (let ((run (spacelift-run-create :id "run-1" :stack-id "stack-1" :state "FAILED")))
+    (cl-letf (((symbol-function 'spacelift-run-failed-phase)
+               (lambda (_run) "APPLYING"))
+              ((symbol-function 'spacelift-run-plan-log)
+               (lambda (_run _phase) "line one\nline two\n\nline three\n")))
+      (let ((result (spacelift-run-plan-diff run)))
+        (should (equal (car result) '(error . "Failed during APPLYING")))
+        (should (equal (mapcar #'cdr (cdr result))
+                       '("line one" "line two" "line three")))))))
+
+(ert-deftest spacelift-stack-list-toggle-diff-shows-and-hides-lines ()
+  (let ((stack (spacelift-stack-create :id "stack-1" :name "stack-1"))
+        (run (spacelift-run-create :id "run-1" :stack-id "stack-1")))
+    (with-temp-buffer
+      (spacelift-stack-list-mode)
+      (spacelift--insert-stack-list (list stack))
+      (goto-char (point-min))
+      (cl-letf (((symbol-function 'spacelift--select-profile) #'ignore)
+                ((symbol-function 'spacelift-stack-current-run)
+                 (lambda (_stack) run))
+                ((symbol-function 'spacelift-run-plan-diff)
+                 (lambda (_run) (list (cons 'diff "~ some:Resource: (update)")))))
+        (should (= (count-lines (point-min) (point-max)) 1))
+        (spacelift-stack-list-toggle-diff)
+        (should (= (count-lines (point-min) (point-max)) 2))
+        (goto-char (point-min))
+        (forward-line 1)
+        (should (equal (buffer-substring (line-beginning-position) (line-end-position))
+                       "    ~ some:Resource: (update)"))
+        (goto-char (point-min))
+        (spacelift-stack-list-toggle-diff)
+        (should (= (count-lines (point-min) (point-max)) 1))))))
