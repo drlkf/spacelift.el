@@ -200,6 +200,16 @@ are fetched and promoted into the stack."
         (spacelift-stack--set-blocker stack blocker)))
     stack))
 
+(defun spacelift-stack-sync-commit (id)
+  "Sync the tracked commit of stack ID via `spacectl stack sync-commit'.
+Return `spacectl''s raw output.  This is a write operation."
+  (spacelift--run "stack" "sync-commit" "--id" id))
+
+(defun spacelift-stack-deploy (id)
+  "Trigger a tracked run on stack ID via `spacectl stack deploy'.
+Return `spacectl''s raw output.  This is a write operation."
+  (spacelift--run "stack" "deploy" "--id" id))
+
 (provide 'spacelift-stack)
 
 ;;; spacelift-stack.el ends here

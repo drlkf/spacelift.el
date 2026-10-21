@@ -374,6 +374,8 @@ Width and alignment flags (e.g. %-12s) are supported."
     ("t" "Retry current run" spacelift-stack-list-retry)
     ("T" "Retry current run (no confirm)" spacelift-stack-list-retry-no-confirm)
     ("P" "Prioritize current run" spacelift-stack-list-prioritize)
+    ("s" "Sync tracked commit" spacelift-stack-list-sync)
+    ("D" "Trigger run" spacelift-stack-list-trigger)
     ("f" "Toggle non-successful only" spacelift-stack-list-toggle-unsuccessful)
     ("r" "Reload" spacelift-stack-list-refresh)]
    ["Window"
@@ -394,6 +396,8 @@ Width and alignment flags (e.g. %-12s) are supported."
     ("d" "Discard current run" spacelift-stack-discard)
     ("t" "Retry current run" spacelift-stack-retry)
     ("P" "Prioritize current run" spacelift-stack-prioritize)
+    ("s" "Sync tracked commit" spacelift-stack-sync)
+    ("D" "Trigger run" spacelift-stack-trigger)
     ("r" "Reload" spacelift-stack-refresh)]
    ["Window"
     ("q" "Quit window" quit-window)
@@ -534,6 +538,8 @@ Width and alignment flags (e.g. %-12s) are supported."
     (define-key map (kbd "t") #'spacelift-stack-list-retry)
     (define-key map (kbd "T") #'spacelift-stack-list-retry-no-confirm)
     (define-key map (kbd "P") #'spacelift-stack-list-prioritize)
+    (define-key map (kbd "s") #'spacelift-stack-list-sync)
+    (define-key map (kbd "D") #'spacelift-stack-list-trigger)
     (define-key map (kbd "f") #'spacelift-stack-list-toggle-unsuccessful)
     (define-key map (kbd "r") #'spacelift-stack-list-refresh)
     (define-key map (kbd "g") #'spacelift-stack-list-refresh)
@@ -889,6 +895,44 @@ With a prefix argument DEPRIORITIZE the run instead."
     (when (spacelift--prioritize-stack-current-run stack deprioritize)
       (spacelift-stack-list-refresh))))
 
+(defun spacelift--stack-write-action (stack prompt done fn)
+  "Ask PROMPT about STACK, then call FN with its id and report DONE.
+Return non-nil when FN was called."
+  (spacelift-with-auth
+    (let ((id (spacelift-stack-id stack)))
+      (when (yes-or-no-p (format "%s stack %s? " prompt id))
+        (funcall fn id)
+        (message "%s stack %s" done id)
+        t))))
+
+(defun spacelift--sync-stack (stack)
+  "Sync STACK's tracked commit after confirmation."
+  (spacelift--stack-write-action stack "Sync tracked commit of" "Synced"
+                                 #'spacelift-stack-sync-commit))
+
+(defun spacelift--trigger-stack (stack)
+  "Trigger a tracked run on STACK after confirmation."
+  (spacelift--stack-write-action stack "Trigger a run on" "Triggered a run on"
+                                 #'spacelift-stack-deploy))
+
+(defun spacelift-stack-list-sync ()
+  "Sync the tracked commit of the stack on the current line."
+  (interactive)
+  (let ((stack (spacelift-stack-list-stack-at-point)))
+    (unless stack
+      (user-error "No stack on this line"))
+    (when (spacelift--sync-stack stack)
+      (spacelift-stack-list-refresh))))
+
+(defun spacelift-stack-list-trigger ()
+  "Trigger a tracked run on the stack on the current line."
+  (interactive)
+  (let ((stack (spacelift-stack-list-stack-at-point)))
+    (unless stack
+      (user-error "No stack on this line"))
+    (when (spacelift--trigger-stack stack)
+      (spacelift-stack-list-refresh))))
+
 ;;;###autoload
 (defun spacelift-stack-list-stacks (&optional search limit)
   "Display the list of Spacelift stacks in a dedicated buffer.
@@ -921,6 +965,8 @@ When `spacectl' is not authenticated, offer to log in instead."
     (define-key map (kbd "d") #'spacelift-stack-discard)
     (define-key map (kbd "t") #'spacelift-stack-retry)
     (define-key map (kbd "P") #'spacelift-stack-prioritize)
+    (define-key map (kbd "s") #'spacelift-stack-sync)
+    (define-key map (kbd "D") #'spacelift-stack-trigger)
     (define-key map (kbd "r") #'spacelift-stack-refresh)
     (define-key map (kbd "g") #'spacelift-stack-refresh)
     (define-key map (kbd "q") #'quit-window)
@@ -1120,6 +1166,22 @@ With a prefix argument DEPRIORITIZE the run instead."
   (unless (and (derived-mode-p 'spacelift-stack-mode) spacelift--stack)
     (user-error "Not in a Spacelift stack buffer"))
   (when (spacelift--prioritize-stack-current-run spacelift--stack deprioritize)
+    (spacelift-stack-refresh)))
+
+(defun spacelift-stack-sync ()
+  "Sync the tracked commit of the stack in the current detail buffer."
+  (interactive)
+  (unless (and (derived-mode-p 'spacelift-stack-mode) spacelift--stack)
+    (user-error "Not in a Spacelift stack buffer"))
+  (when (spacelift--sync-stack spacelift--stack)
+    (spacelift-stack-refresh)))
+
+(defun spacelift-stack-trigger ()
+  "Trigger a tracked run on the stack in the current detail buffer."
+  (interactive)
+  (unless (and (derived-mode-p 'spacelift-stack-mode) spacelift--stack)
+    (user-error "Not in a Spacelift stack buffer"))
+  (when (spacelift--trigger-stack spacelift--stack)
     (spacelift-stack-refresh)))
 
 ;;;###autoload
@@ -2051,6 +2113,8 @@ When `spacectl' is not authenticated, offer to log in instead."
       "t" #'spacelift-stack-list-retry
       "T" #'spacelift-stack-list-retry-no-confirm
       "P" #'spacelift-stack-list-prioritize
+      "s" #'spacelift-stack-list-sync
+      "D" #'spacelift-stack-list-trigger
       "." #'spacelift-stack-list-next-owned-unconfirmed
       "f" #'spacelift-stack-list-toggle-unsuccessful
       (kbd "TAB") #'spacelift-stack-list-toggle-diff
@@ -2063,7 +2127,9 @@ When `spacectl' is not authenticated, offer to log in instead."
       "c" #'spacelift-stack-confirm
       "d" #'spacelift-stack-discard
       "t" #'spacelift-stack-retry
-      "P" #'spacelift-stack-prioritize)
+      "P" #'spacelift-stack-prioritize
+      "s" #'spacelift-stack-sync
+      "D" #'spacelift-stack-trigger)
     (evil-define-key* '(motion normal) spacelift-worker-pool-list-mode-map
       (kbd "RET") #'spacelift-worker-pool-list-workers
       "Q" #'spacelift-worker-pool-list-queue
