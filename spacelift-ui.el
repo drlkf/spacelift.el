@@ -182,20 +182,19 @@ Width and alignment flags (e.g. %-12s) are supported."
   :type 'integer
   :group 'spacelift)
 
-(defcustom spacelift-confirm-no-prompt nil
-  "When non-nil, confirm runs without asking for confirmation."
-  :type 'boolean
-  :group 'spacelift)
+(defmacro spacelift--define-no-prompt (action what)
+  "Define `spacelift-ACTION-no-prompt' skipping the prompt before WHAT."
+  `(defcustom ,(intern (format "spacelift-%s-no-prompt" action)) nil
+     ,(format "When non-nil, %s without asking for confirmation." what)
+     :type 'boolean
+     :group 'spacelift))
 
-(defcustom spacelift-discard-no-prompt nil
-  "When non-nil, discard runs without asking for confirmation."
-  :type 'boolean
-  :group 'spacelift)
-
-(defcustom spacelift-prioritize-no-prompt nil
-  "When non-nil, (de)prioritize runs without asking for confirmation."
-  :type 'boolean
-  :group 'spacelift)
+(spacelift--define-no-prompt confirm "confirm runs")
+(spacelift--define-no-prompt discard "discard runs")
+(spacelift--define-no-prompt prioritize "(de)prioritize runs")
+(spacelift--define-no-prompt retry "retry runs")
+(spacelift--define-no-prompt sync "sync stacks' tracked commit")
+(spacelift--define-no-prompt trigger "trigger stack runs")
 
 ;;; State
 
@@ -846,7 +845,7 @@ when STACK is blocked, otherwise its latest run.  Retrying is a write
       (unless run
         (user-error "Stack %s has no runs" stack-id))
       (let ((id (spacelift-run-id run)))
-        (when (or no-confirm
+        (when (or no-confirm spacelift-retry-no-prompt
                   (yes-or-no-p (format "Retry run %s of stack %s? " id stack-id)))
           (spacelift-run-retry run)
           (message "Retried run %s" id)
@@ -895,12 +894,13 @@ With a prefix argument DEPRIORITIZE the run instead."
     (when (spacelift--prioritize-stack-current-run stack deprioritize)
       (spacelift-stack-list-refresh))))
 
-(defun spacelift--stack-write-action (stack prompt done fn)
+(defun spacelift--stack-write-action (stack prompt done fn no-prompt)
   "Ask PROMPT about STACK, then call FN with its id and report DONE.
-Return non-nil when FN was called."
+Skip the question when NO-PROMPT is non-nil.  Return non-nil when FN was
+called."
   (spacelift-with-auth
     (let ((id (spacelift-stack-id stack)))
-      (when (yes-or-no-p (format "%s stack %s? " prompt id))
+      (when (or no-prompt (yes-or-no-p (format "%s stack %s? " prompt id)))
         (funcall fn id)
         (message "%s stack %s" done id)
         t))))
@@ -908,12 +908,14 @@ Return non-nil when FN was called."
 (defun spacelift--sync-stack (stack)
   "Sync STACK's tracked commit after confirmation."
   (spacelift--stack-write-action stack "Sync tracked commit of" "Synced"
-                                 #'spacelift-stack-sync-commit))
+                                 #'spacelift-stack-sync-commit
+                                 spacelift-sync-no-prompt))
 
 (defun spacelift--trigger-stack (stack)
   "Trigger a tracked run on STACK after confirmation."
   (spacelift--stack-write-action stack "Trigger a run on" "Triggered a run on"
-                                 #'spacelift-stack-deploy))
+                                 #'spacelift-stack-deploy
+                                 spacelift-trigger-no-prompt))
 
 (defun spacelift-stack-list-sync ()
   "Sync the tracked commit of the stack on the current line."
@@ -1479,7 +1481,8 @@ confirmation first."
     (unless run
       (user-error "No run at point or in the current buffer"))
     (let ((id (spacelift-run-id run)))
-      (when (or no-confirm (yes-or-no-p (format "Retry run %s? " id)))
+      (when (or no-confirm spacelift-retry-no-prompt
+                (yes-or-no-p (format "Retry run %s? " id)))
         (spacelift-with-auth
           (spacelift-run-retry run)
           (message "Retried run %s" id)
@@ -1639,7 +1642,8 @@ run of STACK-ID."
   (unless spacelift--log-run
     (user-error "The latest-run log buffer has no specific run to retry"))
   (let ((id (spacelift-run-id spacelift--log-run)))
-    (when (yes-or-no-p (format "Retry run %s? " id))
+    (when (or spacelift-retry-no-prompt
+              (yes-or-no-p (format "Retry run %s? " id)))
       (spacelift-with-auth
         (spacelift-run-retry spacelift--log-run)
         (message "Retried run %s" id)))))

@@ -150,7 +150,7 @@ deliberately left to evil (e.g. `gg`), so use `r` to reload.
 - `spacelift-run-list-max-results`: default maximum number of runs fetched.
 - `spacelift-worker-queue-max-results`: default maximum number of queued runs
   fetched for a queue buffer.
-- `spacelift-confirm-no-prompt`, `spacelift-discard-no-prompt`, `spacelift-prioritize-no-prompt`: when non-nil, run the action without the `yes-or-no-p` prompt.
+- `spacelift-confirm-no-prompt`, `spacelift-discard-no-prompt`, `spacelift-prioritize-no-prompt`, `spacelift-retry-no-prompt`, `spacelift-sync-no-prompt`, `spacelift-trigger-no-prompt`: when non-nil, run the action without the `yes-or-no-p` prompt.
 
 Stack line specifiers:
 
