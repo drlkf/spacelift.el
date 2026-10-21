@@ -19,13 +19,13 @@ a terminal buffer. Complete the interactive flow there, then retry the command.
 Load the package and call one of the entry points:
 
 - `M-x spacelift-stack-list-stacks` opens a buffer listing your stacks. With a
-prefix argument (`C-u`), you are prompted for a full-text search string.
+  prefix argument (`C-u`), you are prompted for a full-text search string.
 - `M-x spacelift-stack-show-buffer` prompts for a stack id and opens its detail
-buffer directly.
+  buffer directly.
 - `M-x spacelift-run-list-buffer` prompts for a stack id and opens a buffer
-listing that stack's runs.
+  listing that stack's runs.
 - `M-x spacelift-worker-pool-list-pools` opens a buffer listing your worker
-pools.
+  pools.
 
 In the stack list buffer, press `RET` on a stack to open its detail buffer, or
 `R` to open its run list. In a run list buffer, press `RET` on a run to open its
@@ -34,104 +34,103 @@ detail buffer, or `l` to view its logs.
 In the worker pool list buffer, press `RET` on a pool to open its worker list,
 or `Q` to open its queue (the runs waiting to be scheduled on the pool). In a
 queue buffer, press `RET` on a queued run to open its detail buffer, or `l` to
-view its logs. `M-x spacelift-worker-pool-worker-list-buffer` and `M-x
-spacelift-worker-pool-queue-buffer` prompt for a pool id and open those buffers
+view its logs. `M-x spacelift-worker-pool-worker-list-buffer` and `M-x spacelift-worker-pool-queue-buffer` prompt for a pool id and open those buffers
 directly.
 
 Stack list and stack detail buffers:
 
-| Key   | Action               |
+| Key | Action |
 |-------|----------------------|
-| `r`   | Reload the buffer    |
-| `q`   | Quit the window      |
-| `?`   | Show a magit-style popup of the available keys |
+| `r` | Reload the buffer |
+| `q` | Quit the window |
+| `?` | Show a magit-style popup of the available keys |
 | `RET` | Visit the stack (list buffer only) |
-| `R`   | Open the stack's run list |
-| `W`   | Open the worker pool list |
-| `w`   | Browse the stack in the Spacelift console |
-| `y`   | Copy the stack's Spacelift console URL to the kill ring |
-| `l`   | View the stack's current run logs (blocking run when blocked, else latest; `C-u l` to follow/tail) |
-| `c`   | Confirm the stack's current run if unconfirmed (blocking run when blocked, else latest; asks first) |
-| `C`   | Confirm the stack's current run without confirmation |
-| `d`   | Discard the stack's current run if unconfirmed (blocking run when blocked, else latest; asks first) |
-| `t`   | Retry the stack's current run (blocking run when blocked, else latest; asks first) |
-| `T`   | Retry the stack's current run without confirmation |
-| `P`   | Prioritize the stack's current run (`C-u P` to deprioritize; asks first) |
-| `.`   | Jump to your next stack with an owned unconfirmed run (list buffer only) |
+| `R` | Open the stack's run list |
+| `W` | Open the worker pool list |
+| `w` | Browse the stack in the Spacelift console |
+| `y` | Copy the stack's Spacelift console URL to the kill ring |
+| `l` | View the stack's current run logs (blocking run when blocked, else latest; `C-u l` to follow/tail) |
+| `c` | Confirm the stack's current run if unconfirmed (blocking run when blocked, else latest; asks first) |
+| `C` | Confirm the stack's current run without confirmation |
+| `d` | Discard the stack's current run if unconfirmed (blocking run when blocked, else latest; asks first) |
+| `t` | Retry the stack's current run (blocking run when blocked, else latest; asks first) |
+| `T` | Retry the stack's current run without confirmation |
+| `P` | Prioritize the stack's current run (`C-u P` to deprioritize; asks first) |
+| `.` | Jump to your next stack with an owned unconfirmed run (list buffer only) |
 | `j`/`k`, `n`/`p` | Move down/up (list buffer) |
 
 Run list and run detail buffers:
 
-| Key   | Action               |
+| Key | Action |
 |-------|----------------------|
-| `r`   | Reload the buffer    |
-| `q`   | Quit the window      |
-| `?`   | Show a magit-style popup of the available keys |
+| `r` | Reload the buffer |
+| `q` | Quit the window |
+| `?` | Show a magit-style popup of the available keys |
 | `RET` | Visit the run (list buffer only) |
-| `W`   | Open the worker pool list |
-| `w`   | Browse the run URL in the Spacelift console |
-| `y`   | Copy the run's Spacelift console URL to the kill ring |
-| `l`   | View the run's logs (`C-u l` to follow/tail) |
-| `c`   | Confirm an unconfirmed run (asks first) |
-| `d`   | Discard an unconfirmed run (asks first) |
-| `t`   | Retry a failed run (asks first) |
-| `P`   | Prioritize a run (`C-u P` to deprioritize; asks first) |
+| `W` | Open the worker pool list |
+| `w` | Browse the run URL in the Spacelift console |
+| `y` | Copy the run's Spacelift console URL to the kill ring |
+| `l` | View the run's logs (`C-u l` to follow/tail) |
+| `c` | Confirm an unconfirmed run (asks first) |
+| `d` | Discard an unconfirmed run (asks first) |
+| `t` | Retry a failed run (asks first) |
+| `P` | Prioritize a run (`C-u P` to deprioritize; asks first) |
 | `j`/`k`, `n`/`p` | Move down/up (list buffer) |
 
 Run log buffers:
 
-| Key   | Action               |
+| Key | Action |
 |-------|----------------------|
-| `r`   | Reload the logs      |
-| `F`   | Toggle following (tailing) the run |
-| `W`   | Open the worker pool list |
-| `w`   | Browse the run URL in the Spacelift console |
-| `y`   | Copy the run/stack Spacelift console URL to the kill ring |
-| `t`   | Retry the run (asks first) |
-| `T`   | Retry the run without confirmation |
-| `c`   | Confirm an unconfirmed run (asks first) |
-| `C`   | Confirm an unconfirmed run without confirmation |
-| `d`   | Discard the run (asks first) |
-| `P`   | Prioritize the run (`C-u P` to deprioritize; asks first) |
-| `q`   | Stop the log process and quit the window |
-| `?`   | Show a magit-style popup of the available keys |
+| `r` | Reload the logs |
+| `F` | Toggle following (tailing) the run |
+| `W` | Open the worker pool list |
+| `w` | Browse the run URL in the Spacelift console |
+| `y` | Copy the run/stack Spacelift console URL to the kill ring |
+| `t` | Retry the run (asks first) |
+| `T` | Retry the run without confirmation |
+| `c` | Confirm an unconfirmed run (asks first) |
+| `C` | Confirm an unconfirmed run without confirmation |
+| `d` | Discard the run (asks first) |
+| `P` | Prioritize the run (`C-u P` to deprioritize; asks first) |
+| `q` | Stop the log process and quit the window |
+| `?` | Show a magit-style popup of the available keys |
 
 Worker pool list buffer:
 
-| Key   | Action               |
+| Key | Action |
 |-------|----------------------|
-| `r`   | Reload the buffer    |
-| `q`   | Quit the window      |
-| `?`   | Show a magit-style popup of the available keys |
+| `r` | Reload the buffer |
+| `q` | Quit the window |
+| `?` | Show a magit-style popup of the available keys |
 | `RET` | Open the pool's worker list |
-| `Q`   | Open the pool's queue |
-| `w`   | Browse the pool in the Spacelift console |
-| `y`   | Copy the pool's Spacelift console URL to the kill ring |
+| `Q` | Open the pool's queue |
+| `w` | Browse the pool in the Spacelift console |
+| `y` | Copy the pool's Spacelift console URL to the kill ring |
 | `j`/`k`, `n`/`p` | Move down/up |
 
 Worker list buffer:
 
-| Key   | Action               |
+| Key | Action |
 |-------|----------------------|
-| `r`   | Reload the buffer    |
-| `q`   | Quit the window      |
-| `?`   | Show a magit-style popup of the available keys |
-| `Q`   | Open the pool's queue |
-| `w`   | Browse the pool in the Spacelift console |
-| `y`   | Copy the pool's Spacelift console URL to the kill ring |
+| `r` | Reload the buffer |
+| `q` | Quit the window |
+| `?` | Show a magit-style popup of the available keys |
+| `Q` | Open the pool's queue |
+| `w` | Browse the pool in the Spacelift console |
+| `y` | Copy the pool's Spacelift console URL to the kill ring |
 | `j`/`k`, `n`/`p` | Move down/up |
 
 Queue buffer:
 
-| Key   | Action               |
+| Key | Action |
 |-------|----------------------|
-| `r`   | Reload the buffer    |
-| `q`   | Quit the window      |
-| `?`   | Show a magit-style popup of the available keys |
+| `r` | Reload the buffer |
+| `q` | Quit the window |
+| `?` | Show a magit-style popup of the available keys |
 | `RET` | Visit the queued run's detail buffer |
-| `l`   | View the queued run's logs (`C-u l` to follow/tail) |
-| `w`   | Browse the queued run URL in the Spacelift console |
-| `y`   | Copy the queued run's Spacelift console URL to the kill ring |
+| `l` | View the queued run's logs (`C-u l` to follow/tail) |
+| `w` | Browse the queued run URL in the Spacelift console |
+| `y` | Copy the queued run's Spacelift console URL to the kill ring |
 | `j`/`k`, `n`/`p` | Move down/up |
 
 These bindings work both with vanilla Emacs and with `evil-mode`. When `evil`
@@ -143,43 +142,44 @@ deliberately left to evil (e.g. `gg`), so use `r` to reload.
 
 - `spacelift-spacectl-executable`: path to the `spacectl` binary.
 - `spacelift-profile`: profile alias selected via `spacectl profile select`
-before each command (uses the current profile when nil).
+  before each command (uses the current profile when nil).
 - `spacelift-login-offer`: when non-nil (the default), offer to log in when
-`spacectl` is not authenticated.
+  `spacectl` is not authenticated.
 - `spacelift-stack-line-format`: format string for a stack line.
 - `spacelift-run-line-format`: format string for a run line.
 - `spacelift-run-list-max-results`: default maximum number of runs fetched.
 - `spacelift-worker-queue-max-results`: default maximum number of queued runs
-fetched for a queue buffer.
+  fetched for a queue buffer.
+- `spacelift-confirm-no-prompt`, `spacelift-discard-no-prompt`, `spacelift-prioritize-no-prompt`: when non-nil, run the action without the `yes-or-no-p` prompt.
 
 Stack line specifiers:
 
-| Spec | Meaning            |
+| Spec | Meaning |
 |------|--------------------|
-| `%n` | stack name         |
-| `%i` | stack id (slug)    |
+| `%n` | stack name |
+| `%i` | stack id (slug) |
 | `%s` | current state (the blocking run's state when a run is blocking the stack, otherwise the stack's settled state) |
 | `%b` | branch (the blocking run's branch when a run is blocking the stack, otherwise the tracked branch) |
 | `%a` | commit author (the blocking run's commit when a run is blocking the stack, otherwise the tracked commit; falling back to login) |
-| `%p` | worker pool name   |
-| `%r` | repository         |
-| `%S` | space name         |
-| `%d` | description        |
+| `%p` | worker pool name |
+| `%r` | repository |
+| `%S` | space name |
+| `%d` | description |
 | `%l` | comma-separated labels |
 
 Run line specifiers:
 
-| Spec | Meaning            |
+| Spec | Meaning |
 |------|--------------------|
-| `%i` | run id             |
-| `%s` | current state      |
-| `%t` | run title          |
-| `%b` | branch             |
-| `%c` | short commit hash  |
-| `%a` | commit author      |
+| `%i` | run id |
+| `%s` | current state |
+| `%t` | run title |
+| `%b` | branch |
+| `%c` | short commit hash |
+| `%a` | commit author |
 | `%A` | triggerer (trigger source, falling back to the commit author) |
-| `%d` | creation date      |
-| `%T` | trigger source     |
+| `%d` | creation date |
+| `%T` | trigger source |
 | `%D` | resource delta (added/changed/deleted) |
 
 Width and alignment flags are supported, e.g. `%-30n`.
@@ -187,10 +187,10 @@ Width and alignment flags are supported, e.g. `%-30n`.
 ## Files
 
 - `spacelift-core.el`: low-level `spacectl` invocation, JSON parsing, and
-console URL helpers.
+  console URL helpers.
 - `spacelift-stack.el`: stack structs and API functions.
 - `spacelift-run.el`: run structs and API functions.
 - `spacelift-worker.el`: worker pool, worker, and queue structs and API
-functions.
+  functions.
 - `spacelift-ui.el`: interactive buffers and major modes.
 - `spacelift.el`: top-level entry point.

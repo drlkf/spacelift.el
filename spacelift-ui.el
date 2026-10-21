@@ -182,6 +182,21 @@ Width and alignment flags (e.g. %-12s) are supported."
   :type 'integer
   :group 'spacelift)
 
+(defcustom spacelift-confirm-no-prompt nil
+  "When non-nil, confirm runs without asking for confirmation."
+  :type 'boolean
+  :group 'spacelift)
+
+(defcustom spacelift-discard-no-prompt nil
+  "When non-nil, discard runs without asking for confirmation."
+  :type 'boolean
+  :group 'spacelift)
+
+(defcustom spacelift-prioritize-no-prompt nil
+  "When non-nil, (de)prioritize runs without asking for confirmation."
+  :type 'boolean
+  :group 'spacelift)
+
 ;;; State
 
 (defvar-local spacelift--stack nil
@@ -615,7 +630,7 @@ Folded diff lines are skipped; only stack header lines are considered."
       (goto-char (point-min))
       (while (and (not match) (< (point) start))
         (let* ((stack (unless (get-text-property (line-beginning-position)
-                                                  'spacelift-diff)
+                                                 'spacelift-diff)
                         (spacelift-stack-list-stack-at-point)))
                (run (and stack (spacelift-stack--blocker-run stack))))
           (when (and run (equal (spacelift-run-state run) "UNCONFIRMED")
@@ -651,10 +666,10 @@ Folded diff lines are skipped; only stack header lines are considered."
 (defun spacelift--stack-list-insert-diff (header stack)
   "Insert STACK's current run plan diff entries after marker HEADER."
   (let ((entries (spacelift-with-auth
-                  (let ((run (spacelift-stack-current-run stack)))
-                    (unless run
-                      (user-error "Stack %s has no runs" (spacelift-stack-id stack)))
-                    (spacelift-run-plan-diff run))))
+                   (let ((run (spacelift-stack-current-run stack)))
+                     (unless run
+                       (user-error "Stack %s has no runs" (spacelift-stack-id stack)))
+                     (spacelift-run-plan-diff run))))
         (inhibit-read-only t))
     (goto-char header)
     (forward-line 1)
@@ -763,7 +778,7 @@ UNCONFIRMED state.  Confirming is a write operation, so it asks for
           (user-error
            "Run %s of stack %s is not awaiting confirmation (state: %s)"
            id stack-id (or state "unknown")))
-        (when (or no-confirm
+        (when (or no-confirm spacelift-confirm-no-prompt
                   (yes-or-no-p (format "Confirm run %s of stack %s? " id stack-id)))
           (spacelift-run-confirm run)
           (message "Confirmed run %s" id)
@@ -798,7 +813,8 @@ UNCONFIRMED state.  Confirming is a write operation, so it asks for
         (unless (equal state "UNCONFIRMED")
           (user-error "Run %s of stack %s is not awaiting confirmation (state: %s)"
                       id stack-id (or state "unknown")))
-        (when (yes-or-no-p (format "Discard run %s of stack %s? " id stack-id))
+        (when (or spacelift-discard-no-prompt
+                  (yes-or-no-p (format "Discard run %s of stack %s? " id stack-id)))
           (spacelift-run-discard run)
           (message "Discarded run %s" id)
           t)))))
@@ -856,8 +872,9 @@ when STACK is blocked, otherwise its latest run.  Retrying is a write
         (user-error "Stack %s has no runs" stack-id))
       (let ((id (spacelift-run-id run))
             (action (if deprioritize "Deprioritize" "Prioritize")))
-        (when (yes-or-no-p (format "%s run %s of stack %s? "
-                                   action id stack-id))
+        (when (or spacelift-prioritize-no-prompt
+                  (yes-or-no-p (format "%s run %s of stack %s? "
+                                       action id stack-id)))
           (spacelift-run-prioritize run deprioritize)
           (message "%sd run %s" action id)
           t)))))
@@ -1349,7 +1366,8 @@ confirmation first."
       (unless (equal state "UNCONFIRMED")
         (user-error "Run %s is not awaiting confirmation (state: %s)"
                     id (or state "unknown")))
-      (when (or no-confirm (yes-or-no-p (format "Confirm run %s? " id)))
+      (when (or no-confirm spacelift-confirm-no-prompt
+                (yes-or-no-p (format "Confirm run %s? " id)))
         (spacelift-with-auth
           (spacelift-run-confirm run)
           (message "Confirmed run %s" id)
@@ -1378,7 +1396,8 @@ confirmation first."
       (unless (equal state "UNCONFIRMED")
         (user-error "Run %s is not awaiting confirmation (state: %s)"
                     id (or state "unknown")))
-      (when (yes-or-no-p (format "Discard run %s? " id))
+      (when (or spacelift-discard-no-prompt
+                (yes-or-no-p (format "Discard run %s? " id)))
         (spacelift-with-auth
           (spacelift-run-discard run)
           (message "Discarded run %s" id)
@@ -1418,7 +1437,8 @@ operation, so it asks for confirmation first."
       (user-error "No run at point or in the current buffer"))
     (let ((id (spacelift-run-id run))
           (action (if deprioritize "Deprioritize" "Prioritize")))
-      (when (yes-or-no-p (format "%s run %s? " action id))
+      (when (or spacelift-prioritize-no-prompt
+                (yes-or-no-p (format "%s run %s? " action id)))
         (spacelift-with-auth
           (spacelift-run-prioritize run deprioritize)
           (message "%sd run %s" action id)
@@ -1573,30 +1593,31 @@ run of STACK-ID."
     (spacelift-run-retry spacelift--log-run)
     (message "Retried run %s" (spacelift-run-id spacelift--log-run))))
 
-(defun spacelift-run-log-browse ()
-  "Browse the Spacelift console URL for the current log buffer.
-Opens the run URL when known, or the stack URL for a latest-run buffer."
-  (interactive)
+(defun spacelift--run-log-url ()
+  "Return the run URL for the current log buffer.
+A latest-run buffer resolves the stack's most recent run, falling back
+to the stack URL when it has no run."
   (unless (and (derived-mode-p 'spacelift-run-log-mode) spacelift--log-stack-id)
     (user-error "Not in a Spacelift run log buffer"))
+  (let ((run (or spacelift--log-run
+                 (car (spacelift-stack-run-list spacelift--log-stack-id 1)))))
+    (if run
+        (spacelift-run-browse-url run)
+      (spacelift-stack-url spacelift--log-stack-id))))
+
+(defun spacelift-run-log-browse ()
+  "Browse the Spacelift console URL of the run in the current log buffer."
+  (interactive)
   (spacelift-with-auth
-    (let ((url (if spacelift--log-run
-                   (spacelift-run-browse-url spacelift--log-run)
-                 (spacelift-stack-url spacelift--log-stack-id))))
+    (let ((url (spacelift--run-log-url)))
       (browse-url url)
       (message "Browsing %s" url))))
 
 (defun spacelift-run-log-copy-url ()
-  "Copy the Spacelift console URL for the current log buffer.
-Copies the run URL when known, or the stack URL for a latest-run buffer."
+  "Copy the Spacelift console URL of the run in the current log buffer."
   (interactive)
-  (unless (and (derived-mode-p 'spacelift-run-log-mode) spacelift--log-stack-id)
-    (user-error "Not in a Spacelift run log buffer"))
   (spacelift-with-auth
-    (spacelift--copy-url
-     (if spacelift--log-run
-         (spacelift-run-browse-url spacelift--log-run)
-       (spacelift-stack-url spacelift--log-stack-id)))))
+    (spacelift--copy-url (spacelift--run-log-url))))
 
 (defun spacelift-run-log-quit ()
   "Stop any running log process and quit the log window."
