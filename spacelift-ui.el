@@ -374,6 +374,7 @@ Width and alignment flags (e.g. %-12s) are supported."
     ("T" "Retry current run (no confirm)" spacelift-stack-list-retry-no-confirm)
     ("P" "Prioritize current run" spacelift-stack-list-prioritize)
     ("s" "Sync tracked commit" spacelift-stack-list-sync)
+    ("K" "Lock/unlock stack" spacelift-stack-list-toggle-lock)
     ("D" "Trigger run" spacelift-stack-list-trigger)
     ("f" "Toggle non-successful only" spacelift-stack-list-toggle-unsuccessful)
     ("r" "Reload" spacelift-stack-list-refresh)]
@@ -396,6 +397,7 @@ Width and alignment flags (e.g. %-12s) are supported."
     ("t" "Retry current run" spacelift-stack-retry)
     ("P" "Prioritize current run" spacelift-stack-prioritize)
     ("s" "Sync tracked commit" spacelift-stack-sync)
+    ("K" "Lock/unlock stack" spacelift-stack-toggle-lock)
     ("D" "Trigger run" spacelift-stack-trigger)
     ("r" "Reload" spacelift-stack-refresh)]
    ["Window"
@@ -538,6 +540,7 @@ Width and alignment flags (e.g. %-12s) are supported."
     (define-key map (kbd "T") #'spacelift-stack-list-retry-no-confirm)
     (define-key map (kbd "P") #'spacelift-stack-list-prioritize)
     (define-key map (kbd "s") #'spacelift-stack-list-sync)
+    (define-key map (kbd "K") #'spacelift-stack-list-toggle-lock)
     (define-key map (kbd "D") #'spacelift-stack-list-trigger)
     (define-key map (kbd "f") #'spacelift-stack-list-toggle-unsuccessful)
     (define-key map (kbd "r") #'spacelift-stack-list-refresh)
@@ -917,6 +920,29 @@ called."
                                  #'spacelift-stack-deploy
                                  spacelift-trigger-no-prompt))
 
+(defun spacelift--toggle-stack-lock (stack)
+  "Lock STACK, or unlock it when already locked, after confirmation."
+  (spacelift-with-auth
+    (let* ((id (spacelift-stack-id stack))
+           (owner (spacelift-stack-locked-by id)))
+      (if owner
+          (spacelift--stack-write-action
+           stack (format "Unlock (held by %s)" owner) "Unlocked"
+           #'spacelift-stack-unlock nil)
+        (when (yes-or-no-p (format "Lock stack %s? " id))
+          (spacelift-stack-lock id (read-string "Lock note (optional): "))
+          (message "Locked stack %s" id)
+          t)))))
+
+(defun spacelift-stack-list-toggle-lock ()
+  "Lock or unlock the stack on the current line."
+  (interactive)
+  (let ((stack (spacelift-stack-list-stack-at-point)))
+    (unless stack
+      (user-error "No stack on this line"))
+    (when (spacelift--toggle-stack-lock stack)
+      (spacelift-stack-list-refresh))))
+
 (defun spacelift-stack-list-sync ()
   "Sync the tracked commit of the stack on the current line."
   (interactive)
@@ -968,6 +994,7 @@ When `spacectl' is not authenticated, offer to log in instead."
     (define-key map (kbd "t") #'spacelift-stack-retry)
     (define-key map (kbd "P") #'spacelift-stack-prioritize)
     (define-key map (kbd "s") #'spacelift-stack-sync)
+    (define-key map (kbd "K") #'spacelift-stack-toggle-lock)
     (define-key map (kbd "D") #'spacelift-stack-trigger)
     (define-key map (kbd "r") #'spacelift-stack-refresh)
     (define-key map (kbd "g") #'spacelift-stack-refresh)
@@ -1000,11 +1027,13 @@ When `spacectl' is not authenticated, offer to log in instead."
       (kbd "RET") #'spacelift-stack-list-visit
       "W" #'spacelift-worker-pool-list-pools
       "r" #'spacelift-stack-list-refresh
+      "K" #'spacelift-stack-list-toggle-lock
       "q" #'quit-window
       "?" #'spacelift-help)
     (evil-define-key* '(motion normal) spacelift-stack-mode-map
       "W" #'spacelift-worker-pool-list-pools
       "r" #'spacelift-stack-refresh
+      "K" #'spacelift-stack-toggle-lock
       "q" #'quit-window
       "?" #'spacelift-help)))
 
@@ -1176,6 +1205,14 @@ With a prefix argument DEPRIORITIZE the run instead."
   (unless (and (derived-mode-p 'spacelift-stack-mode) spacelift--stack)
     (user-error "Not in a Spacelift stack buffer"))
   (when (spacelift--sync-stack spacelift--stack)
+    (spacelift-stack-refresh)))
+
+(defun spacelift-stack-toggle-lock ()
+  "Lock or unlock the stack in the current detail buffer."
+  (interactive)
+  (unless (and (derived-mode-p 'spacelift-stack-mode) spacelift--stack)
+    (user-error "Not in a Spacelift stack buffer"))
+  (when (spacelift--toggle-stack-lock spacelift--stack)
     (spacelift-stack-refresh)))
 
 (defun spacelift-stack-trigger ()

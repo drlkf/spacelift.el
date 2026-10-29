@@ -78,7 +78,6 @@ display fields not promoted to dedicated slots."
      :project-root (spacelift--alist-get 'projectRoot object)
      :labels (spacelift--alist-get 'labels object)
      :autodeploy (spacelift--alist-get 'autodeploy object)
-     :locked (and (spacelift--alist-get 'Blocker object) t)
      :worker-pool-name (spacelift--alist-get 'name worker)
      :space-name (spacelift--alist-get 'name space)
      :vendor (or (spacelift--alist-get 'vendor vendor)
@@ -198,7 +197,28 @@ are fetched and promoted into the stack."
              (blocker (spacelift--alist-get
                        'blocker (spacelift--alist-get 'stack data))))
         (spacelift-stack--set-blocker stack blocker)))
+    (setf (spacelift-stack-locked stack) (spacelift-stack-locked-by id))
     stack))
+
+(defun spacelift-stack-locked-by (id)
+  "Return the login holding the lock on stack ID, or nil when unlocked."
+  (spacelift--alist-get
+   'lockedBy
+   (spacelift--alist-get
+    'stack (spacelift--run-graphql
+            "query($id: ID!) { stack(id: $id) { lockedBy } }"
+            `((id . ,id))))))
+
+(defun spacelift-stack-lock (id &optional note)
+  "Lock stack ID with optional NOTE via `spacectl stack lock'.
+This is a write operation."
+  (apply #'spacelift--run "stack" "lock" "--id" id
+         (when (and note (not (string-empty-p note)))
+           (list "--note" note))))
+
+(defun spacelift-stack-unlock (id)
+  "Unlock stack ID via `spacectl stack unlock'.  This is a write operation."
+  (spacelift--run "stack" "unlock" "--id" id))
 
 (defun spacelift-stack-sync-commit (id)
   "Sync the tracked commit of stack ID via `spacectl stack sync-commit'.
