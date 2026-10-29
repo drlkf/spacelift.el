@@ -177,6 +177,11 @@ Width and alignment flags (e.g. %-12s) are supported."
   :type 'integer
   :group 'spacelift)
 
+(defcustom spacelift-run-log-fold-on-finish t
+  "When non-nil, fold every resource block once a run log finishes."
+  :type 'boolean
+  :group 'spacelift)
+
 (defcustom spacelift-worker-queue-max-results 50
   "Default maximum number of queued runs fetched for a queue buffer."
   :type 'integer
@@ -458,6 +463,9 @@ Width and alignment flags (e.g. %-12s) are supported."
     ("P" "Prioritize run" spacelift-run-prioritize-at-point)
     ("r" "Reload logs" spacelift-run-log-refresh)
     ("F" "Toggle tailing" spacelift-run-log-tail)]
+   ["Fold"
+    ("TAB" "Toggle diff block" outline-toggle-children :transient t)
+    ("<backtab>" "Toggle all blocks" outline-cycle-buffer :transient t)]
    ["Window"
     ("q" "Quit window" spacelift-run-log-quit)
     ("?" "Close help" transient-quit-one)]])
@@ -686,13 +694,40 @@ Folded diff lines are skipped; only stack header lines are considered."
                             'face 'shadow
                             'spacelift-stack stack
                             'spacelift-diff stack))
-      (dolist (entry entries)
-        (insert (propertize (concat "    " (cdr entry) "\n")
-                            'face (if (eq (car entry) 'error)
-                                      'error
-                                    (spacelift--diff-line-face (cdr entry)))
-                            'spacelift-stack stack
-                            'spacelift-diff stack))))))
+      (let ((has-resources (assq 'resource entries)))
+        (dolist (entry entries)
+          (let* ((kind (car entry))
+                 (text (cdr entry))
+                 (heading (and has-resources (eq kind 'summary)
+                               (string-prefix-p "Resources:" text))))
+            (insert (propertize (concat (cond (heading "  ▸ ")
+                                              ((eq kind 'resource) "        ")
+                                              (t "    "))
+                                        text "\n")
+                                'face (if (eq kind 'error)
+                                          'error
+                                        (spacelift--diff-line-face text))
+                                'invisible (eq kind 'resource)
+                                'spacelift-resources-heading heading
+                                'spacelift-resource (eq kind 'resource)
+                                'spacelift-stack stack
+                                'spacelift-diff stack))))))))
+
+(defun spacelift--stack-list-toggle-resources ()
+  "Toggle the resource list under the \"Resources:\" line at point."
+  (let ((inhibit-read-only t)
+        (bol (line-beginning-position)))
+    (save-excursion
+      (forward-line 1)
+      (let* ((start (point))
+             (hide (not (get-text-property start 'invisible))))
+        (while (get-text-property (line-beginning-position) 'spacelift-resource)
+          (forward-line 1))
+        (put-text-property start (point) 'invisible hide)
+        (goto-char (+ bol 2))
+        (let ((props (text-properties-at (point))))
+          (delete-char 1)
+          (insert (apply #'propertize (if hide "▸" "▾") props)))))))
 
 (defun spacelift-stack-list-toggle-diff ()
   "Toggle a folded diff summary of the stack's current run under its line.
@@ -704,15 +739,21 @@ lines; point returns to the stack line afterwards."
   (let ((stack (spacelift-stack-list-stack-at-point)))
     (unless stack
       (user-error "No stack on this line"))
-    (while (get-text-property (line-beginning-position) 'spacelift-diff)
-      (forward-line -1))
-    (let ((header (point-marker)))
-      (forward-line 1)
-      (if (eq (get-text-property (line-beginning-position) 'spacelift-diff) stack)
-          (spacelift--stack-list-remove-diff header stack)
-        (spacelift--stack-list-insert-diff header stack))
-      (goto-char header)
-      (set-marker header nil))))
+    (if (get-text-property (line-beginning-position) 'spacelift-resources-heading)
+        (spacelift--stack-list-toggle-resources)
+      (spacelift--stack-list-toggle-diff-at stack))))
+
+(defun spacelift--stack-list-toggle-diff-at (stack)
+  "Toggle STACK's diff from point, which is on STACK's line or its diff."
+  (while (get-text-property (line-beginning-position) 'spacelift-diff)
+    (forward-line -1))
+  (let ((header (point-marker)))
+    (forward-line 1)
+    (if (eq (get-text-property (line-beginning-position) 'spacelift-diff) stack)
+        (spacelift--stack-list-remove-diff header stack)
+      (spacelift--stack-list-insert-diff header stack))
+    (goto-char header)
+    (set-marker header nil)))
 
 (defun spacelift-stack-list-visit ()
   "Open the detail buffer for the stack on the current line."
@@ -1577,15 +1618,44 @@ Nil when the buffer streams the stack's latest run via `--run-latest'.")
     (define-key map (kbd "g") #'spacelift-run-log-refresh)
     (define-key map (kbd "G") #'spacelift-run-log-tail)
     (define-key map (kbd "q") #'spacelift-run-log-quit)
+    (define-key map (kbd "TAB") #'outline-toggle-children)
+    (define-key map (kbd "<tab>") #'outline-toggle-children)
+    (define-key map (kbd "<backtab>") #'outline-cycle-buffer)
     (define-key map (kbd "?") #'spacelift-help)
     map)
   "Keymap for `spacelift-run-log-mode'.")
 
 (define-derived-mode spacelift-run-log-mode special-mode "Spacelift-Log"
   "Major mode for showing the logs of a Spacelift run.
+Pulumi resource blocks fold like outline headings.
 
 \\{spacelift-run-log-mode-map}"
-  (setq-local truncate-lines nil))
+  (setq-local truncate-lines nil)
+  ;; Every non-blank line is a heading, so folding follows indentation.
+  (setq-local outline-regexp " *[^ \n]")
+  (setq-local outline-level #'current-indentation)
+  (outline-minor-mode 1)
+  (add-hook 'outline-view-change-hook #'spacelift--run-log-label-folds nil t))
+
+(defun spacelift--run-log-label-folds ()
+  "Show the URN name after each folded Pulumi resource header."
+  (remove-overlays (point-min) (point-max) 'spacelift-fold-label t)
+  (save-excursion
+    (goto-char (point-min))
+    (while (re-search-forward spacelift-run--plan-header-regexp nil t)
+      (let ((eol (line-end-position)))
+        (when (and (< eol (point-max)) (outline-invisible-p (1+ eol)))
+          (let ((end (save-excursion
+                       (beginning-of-line)
+                       (outline-end-of-subtree)
+                       (point))))
+            (save-excursion
+              (when (re-search-forward "\\[urn=[^]\n]*::\\([^]\n]+\\)\\]" end t)
+                (let ((ov (make-overlay eol eol)))
+                  (overlay-put ov 'spacelift-fold-label t)
+                  (overlay-put ov 'before-string
+                               (propertize (concat " " (match-string 1))
+                                           'face 'shadow)))))))))))
 
 (defun spacelift--run-log-buffer-name (stack-id run)
   "Return the log buffer name for RUN under STACK-ID.
@@ -1622,7 +1692,24 @@ When RUN is nil, the buffer name refers to the stack's latest run."
         (let ((inhibit-read-only t))
           (save-excursion
             (goto-char (point-max))
-            (insert (propertize "\n-- end of logs --\n" 'face 'shadow))))))))
+            (insert (propertize "\n-- end of logs --\n" 'face 'shadow))))
+        (when spacelift-run-log-fold-on-finish
+          (spacelift--run-log-fold-all))))))
+
+(defun spacelift--run-log-fold-all ()
+  "Fold every Pulumi resource block in the current buffer."
+  (let (headers)
+    (save-excursion
+      (goto-char (point-min))
+      (while (re-search-forward spacelift-run--plan-header-regexp nil t)
+        (push (line-beginning-position) headers)))
+    ;; Deepest-first: hiding a parent first would hide its child headings.
+    (let ((outline-view-change-hook nil))
+      (save-excursion
+        (dolist (pos headers)
+          (goto-char pos)
+          (outline-hide-subtree)))))
+  (spacelift--run-log-label-folds))
 
 (defun spacelift--run-log-start (stack-id run buffer tail)
   "Start streaming logs into BUFFER, following when TAIL is non-nil.
@@ -2141,6 +2228,9 @@ When `spacectl' is not authenticated, offer to log in instead."
       "P" #'spacelift-run-prioritize-at-point
       "r" #'spacelift-run-log-refresh
       "G" #'spacelift-run-log-tail
+      (kbd "TAB") #'outline-toggle-children
+      (kbd "<tab>") #'outline-toggle-children
+      (kbd "<backtab>") #'outline-cycle-buffer
       "q" #'spacelift-run-log-quit
       "?" #'spacelift-help)
     (evil-define-key* '(motion normal) spacelift-stack-list-mode-map

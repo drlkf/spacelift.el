@@ -256,9 +256,12 @@ except their `[urn=...]' and `[provider=...]' lines, which add noise
 without changing what review needs.  Lines starting with \"error:\" and
 their continuation lines become `error' entries.  The final
 \"Resources:\" block is appended as `summary' entries when present,
-regardless of whether any other entry was kept."
+regardless of whether any other entry was kept; right after its
+heading come `resource' entries \"OP URN\", one per kept block."
   (let ((lines (mapcar #'spacelift-run--strip-color-tags (split-string log "\n")))
         (result nil)
+        (resources nil)
+        (op nil)
         (diff-collecting nil)
         (error-collecting nil))
     (dolist (line lines)
@@ -268,6 +271,9 @@ regardless of whether any other entry was kept."
               diff-collecting (not (member (match-string 1 line)
                                            '("same" "read" "refresh"))))
         (when diff-collecting
+          (setq op (if (string-match "^ *\\([-+~>]+\\)" line)
+                       (match-string 1 line)
+                     "~"))
           (push (cons 'diff line) result)))
        ((string-match-p "^error:" line)
         (setq diff-collecting nil
@@ -285,9 +291,15 @@ regardless of whether any other entry was kept."
               (string-prefix-p "Resources:" line)
               (not (string-prefix-p " " line)))
           (setq diff-collecting nil))
-         ((string-match-p "^ *\\[\\(urn\\|provider\\)=" line) nil)
+         ((string-match "^ *\\[urn=\\([^]]+\\)\\]" line)
+          (push (cons 'resource (concat op " " (match-string 1 line))) resources))
+         ((string-match-p "^ *\\[provider=" line) nil)
          (t (push (cons 'diff line) result))))))
-    (append (nreverse result) (spacelift-run--parse-plan-summary lines))))
+    (let ((summary (spacelift-run--parse-plan-summary lines)))
+      (append (nreverse result)
+              (and summary (list (car summary)))
+              (and summary (nreverse resources))
+              (cdr summary)))))
 
 (defun spacelift-run--last-lines-as-errors (log n)
   "Return the last N non-blank lines of LOG as `(error . TEXT)' entries."

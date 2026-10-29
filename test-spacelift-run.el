@@ -256,8 +256,12 @@
                "Policy Packs run:\n"))
          (result (spacelift-run--parse-plan-diff log))
          (texts (mapcar #'cdr result)))
-    (should (cl-every (lambda (e) (eq (car e) 'diff)) (butlast result 4)))
-    (should (cl-every (lambda (e) (eq (car e) 'summary)) (last result 4)))
+    (should (cl-every (lambda (e) (eq (car e) 'diff)) (butlast result 6)))
+    (should (equal (mapcar #'car (last result 6))
+                   '(summary resource resource summary summary summary)))
+    (should (equal (seq-filter (lambda (e) (eq (car e) 'resource)) result)
+                   '((resource . "~ urn:pulumi:test::proj::gcp:compute/firewall:Firewall::allow-gcp-health-checks")
+                     (resource . "+- urn:pulumi:test::proj::kubernetes:networking.gke.io/v1:HealthCheckPolicy::test-intake-healthcheck"))))
     (should-not (cl-some (lambda (l) (string-match-p "(refresh)\\|(same)\\|(read)" l))
                          texts))
     (should-not (cl-some (lambda (l) (string-match-p "\\[urn=\\|\\[provider=" l))
@@ -337,3 +341,72 @@
         (goto-char (point-min))
         (spacelift-stack-list-toggle-diff)
         (should (= (count-lines (point-min) (point-max)) 1))))))
+
+(ert-deftest spacelift-run-log-mode-folds-resource-blocks ()
+  (with-temp-buffer
+    (insert "Previewing update:\n"
+            "    ~ aws:s3:Bucket: (update)\n"
+            "        tags: {\n"
+            "        }\n"
+            "    + aws:sqs:Queue: (create)\n"
+            "        name: \"q\"\n")
+    (spacelift-run-log-mode)
+    (goto-char (point-min))
+    (forward-line 1)
+    (outline-toggle-children)
+    (forward-line 1)
+    (should (invisible-p (point)))
+    (forward-line 2)
+    (should-not (invisible-p (line-beginning-position)))))
+
+(ert-deftest spacelift-run-log-mode-labels-folded-resources ()
+  (with-temp-buffer
+    (insert "    + aws:sqs/queue:Queue: (create)\n"
+            "        [urn=urn:pulumi:dev::proj::aws:sqs/queue:Queue::my-queue]\n"
+            "        name: \"q\"\n")
+    (spacelift-run-log-mode)
+    (goto-char (point-min))
+    (cl-flet ((labels ()
+                (delq nil (mapcar (lambda (ov) (overlay-get ov 'before-string))
+                                  (overlays-in (point-min) (point-max))))))
+      (outline-toggle-children)
+      (should (equal (labels) '(" my-queue")))
+      (outline-toggle-children)
+      (should-not (labels)))))
+
+(ert-deftest spacelift-run-log-fold-all-folds-every-resource ()
+  (with-temp-buffer
+    (insert "  pulumi:pulumi:Stack: (same)\n"
+            "    + aws:sqs/queue:Queue: (create)\n"
+            "        [urn=urn:pulumi:dev::proj::aws:sqs/queue:Queue::my-queue]\n")
+    (spacelift-run-log-mode)
+    (spacelift--run-log-fold-all)
+    (goto-char (point-min))
+    (should-not (invisible-p (point)))
+    (forward-line 1)
+    (should (invisible-p (point)))
+    (goto-char (point-min))
+    (outline-toggle-children)
+    (forward-line 1)
+    (should-not (invisible-p (point)))
+    (forward-line 1)
+    (should (invisible-p (point)))))
+
+(ert-deftest spacelift-run-log-mode-folds-nested-blocks ()
+  (with-temp-buffer
+    (insert "    ~ aws:s3:Bucket: (update)\n"
+            "        tags: {\n"
+            "            a: 1\n"
+            "        }\n"
+            "        name: \"b\"\n"
+            "    + aws:sqs:Queue: (create)\n")
+    (spacelift-run-log-mode)
+    (goto-char (point-min))
+    (forward-line 1)
+    (outline-toggle-children)
+    (forward-line 1)
+    (should (invisible-p (point)))
+    (forward-line 2)
+    (should-not (invisible-p (point)))
+    (forward-line 1)
+    (should-not (invisible-p (point)))))
