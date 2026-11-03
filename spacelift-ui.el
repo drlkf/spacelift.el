@@ -510,6 +510,7 @@ Width and alignment flags (e.g. %-12s) are supported."
     ("l" "View run logs" spacelift-worker-queue-logs)
     ("w" "Browse run URL" spacelift-worker-queue-browse)
     ("Y" "Copy run URL" spacelift-worker-queue-copy-url)
+    ("P" "Prioritize run(s)" spacelift-worker-queue-prioritize)
     ("r" "Reload" spacelift-worker-queue-refresh)]
    ["Window"
     ("q" "Quit window" quit-window)
@@ -2075,6 +2076,7 @@ When `spacectl' is not authenticated, offer to log in instead."
     (define-key map (kbd "l") #'spacelift-worker-queue-logs)
     (define-key map (kbd "w") #'spacelift-worker-queue-browse)
     (define-key map (kbd "Y") #'spacelift-worker-queue-copy-url)
+    (define-key map (kbd "P") #'spacelift-worker-queue-prioritize)
     (define-key map (kbd "r") #'spacelift-worker-queue-refresh)
     (define-key map (kbd "g") #'spacelift-worker-queue-refresh)
     (define-key map (kbd "q") #'quit-window)
@@ -2114,6 +2116,38 @@ When `spacectl' is not authenticated, offer to log in instead."
   (let ((queued (get-text-property (line-beginning-position)
                                    'spacelift-queued-run)))
     (and queued (spacelift-queued-run-run queued))))
+
+(defun spacelift--worker-queue-runs-in-region ()
+  "Return runs on the lines of the active region, or the run at point."
+  (if (use-region-p)
+      (let ((end (region-end)) runs)
+        (save-excursion
+          (goto-char (region-beginning))
+          (while (and (< (point) end) (not (eobp)))
+            (when-let* ((run (spacelift-worker-queue-run-at-point)))
+              (push run runs))
+            (forward-line 1)))
+        (nreverse runs))
+    (when-let* ((run (spacelift-worker-queue-run-at-point)))
+      (list run))))
+
+(defun spacelift-worker-queue-prioritize (&optional deprioritize)
+  "Prioritize the queued run at point, or every run in the active region.
+With a prefix argument DEPRIORITIZE them instead."
+  (interactive "P")
+  (let ((runs (spacelift--worker-queue-runs-in-region))
+        (action (if deprioritize "Deprioritize" "Prioritize")))
+    (unless runs
+      (user-error "No queued run at point or in region"))
+    (when (or spacelift-prioritize-no-prompt
+              (yes-or-no-p (format "%s %d run(s)? " action (length runs))))
+      (deactivate-mark)
+      (spacelift-with-auth
+        (dolist (run runs)
+          (spacelift-run-prioritize run deprioritize))
+        (message "%sd %d run(s)" action (length runs))
+        (when spacelift--worker-pool-id
+          (spacelift-worker-queue-refresh))))))
 
 (defun spacelift-worker-queue-refresh ()
   "Reload the queue shown in the current buffer."
@@ -2281,9 +2315,12 @@ When `spacectl' is not authenticated, offer to log in instead."
       "l" #'spacelift-worker-queue-logs
       "w" #'spacelift-worker-queue-browse
       "Y" #'spacelift-worker-queue-copy-url
+      "P" #'spacelift-worker-queue-prioritize
       "r" #'spacelift-worker-queue-refresh
       "q" #'quit-window
-      "?" #'spacelift-help)))
+      "?" #'spacelift-help)
+    (evil-define-key* 'visual spacelift-worker-queue-mode-map
+      "P" #'spacelift-worker-queue-prioritize)))
 
 (with-eval-after-load 'evil
   (spacelift--setup-run-evil-bindings))
