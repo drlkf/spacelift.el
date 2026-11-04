@@ -95,6 +95,21 @@
       (should (equal command '("stack" "discard" "--id" "stack-1"
                                "--run" "run-1"))))))
 
+(ert-deftest spacelift-run-discard-action-follows-state ()
+  (pcase-dolist (`(,state . ,verb) '(("UNCONFIRMED" . "discard")
+                                     ("QUEUED" . "cancel")
+                                     ("APPLYING" . "stop")))
+    (let ((run (spacelift-run-create :id "run-1" :stack-id "stack-1"
+                                     :state state))
+          command)
+      (cl-letf (((symbol-function 'spacelift--run)
+                 (lambda (&rest args) (setq command args))))
+        (funcall (cdr (spacelift-run-discard-action run)) run)
+        (should (equal command (list "stack" verb "--id" "stack-1"
+                                     "--run" "run-1"))))))
+  (should-not (spacelift-run-discard-action
+               (spacelift-run-create :state "FINISHED"))))
+
 (ert-deftest spacelift-run-log-retry-retries-the-buffer-run ()
   (let ((run (spacelift-run-create :id "run-1" :stack-id "stack-1"))
         retried)

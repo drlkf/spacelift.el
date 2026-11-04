@@ -148,6 +148,31 @@ Return `spacectl''s raw output.  This is a write operation."
                "--id" (spacelift-run-stack-id run)
                "--run" (spacelift-run-id run))))
 
+(defun spacelift-run-cancel (run)
+  "Cancel RUN, which has not started yet, via `spacectl stack cancel'.
+This is a write operation."
+  (spacelift--run "stack" "cancel"
+                  "--id" (spacelift-run-stack-id run)
+                  "--run" (spacelift-run-id run)))
+
+(defun spacelift-run-stop (run)
+  "Stop the running RUN via `spacectl stack stop'.
+This is a write operation."
+  (spacelift--run "stack" "stop"
+                  "--id" (spacelift-run-stack-id run)
+                  "--run" (spacelift-run-id run)))
+
+(defun spacelift-run-discard-action (run)
+  "Return (VERB . FUNCTION) to get rid of RUN given its state, or nil."
+  (pcase (spacelift-run-state run)
+    ("UNCONFIRMED" '("Discard" . spacelift-run-discard))
+    ;; ponytail: state lists guessed from Spacelift run states, adjust on report
+    ((or "QUEUED" "READY" "PENDING" "PENDING_REVIEW" "NONE")
+     '("Cancel" . spacelift-run-cancel))
+    ((or "PREPARING" "INITIALIZING" "PLANNING" "APPLYING" "PERFORMING"
+         "DESTROYING" "CONFIRMED")
+     '("Stop" . spacelift-run-stop))))
+
 (defun spacelift-run-retry (run)
   "Retry the failed RUN via `spacectl stack retry'.
 Return `spacectl''s raw output.  This is a write operation."

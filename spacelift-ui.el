@@ -374,7 +374,7 @@ Width and alignment flags (e.g. %-12s) are supported."
     ("l" "View current run logs" spacelift-stack-list-latest-logs)
     ("c" "Confirm current run" spacelift-stack-list-confirm)
     ("C" "Confirm current run (no confirm)" spacelift-stack-list-confirm-no-confirm)
-    ("d" "Discard current run" spacelift-stack-list-discard)
+    ("d" "Discard/cancel/stop current run" spacelift-stack-list-discard)
     ("t" "Retry current run" spacelift-stack-list-retry)
     ("T" "Retry current run (no confirm)" spacelift-stack-list-retry-no-confirm)
     ("P" "Prioritize current run" spacelift-stack-list-prioritize)
@@ -398,7 +398,7 @@ Width and alignment flags (e.g. %-12s) are supported."
     ("Y" "Copy URL" spacelift-stack-copy-url)
     ("l" "View current run logs" spacelift-stack-latest-logs)
     ("c" "Confirm current run" spacelift-stack-confirm)
-    ("d" "Discard current run" spacelift-stack-discard)
+    ("d" "Discard/cancel/stop current run" spacelift-stack-discard)
     ("t" "Retry current run" spacelift-stack-retry)
     ("P" "Prioritize current run" spacelift-stack-prioritize)
     ("s" "Sync tracked commit" spacelift-stack-sync)
@@ -422,7 +422,7 @@ Width and alignment flags (e.g. %-12s) are supported."
     ("Y" "Copy URL" spacelift-run-copy-url)
     ("l" "View logs" spacelift-run-logs)
     ("c" "Confirm run" spacelift-run-confirm-at-point)
-    ("d" "Discard run" spacelift-run-discard-at-point)
+    ("d" "Discard/cancel/stop run" spacelift-run-discard-at-point)
     ("t" "Retry run" spacelift-run-retry-at-point)
     ("P" "Prioritize run" spacelift-run-prioritize-at-point)
     ("r" "Reload" spacelift-run-list-refresh)]
@@ -440,7 +440,7 @@ Width and alignment flags (e.g. %-12s) are supported."
     ("Y" "Copy URL" spacelift-run-copy-url)
     ("l" "View logs" spacelift-run-logs)
     ("c" "Confirm run" spacelift-run-confirm-at-point)
-    ("d" "Discard run" spacelift-run-discard-at-point)
+    ("d" "Discard/cancel/stop run" spacelift-run-discard-at-point)
     ("t" "Retry run" spacelift-run-retry-at-point)
     ("P" "Prioritize run" spacelift-run-prioritize-at-point)
     ("r" "Reload" spacelift-run-refresh)]
@@ -858,15 +858,16 @@ UNCONFIRMED state.  Confirming is a write operation, so it asks for
           (stack-id (spacelift-stack-id stack)))
       (unless run
         (user-error "Stack %s has no runs" stack-id))
-      (let ((state (spacelift-run-state run))
+      (let ((action (spacelift-run-discard-action run))
             (id (spacelift-run-id run)))
-        (unless (equal state "UNCONFIRMED")
-          (user-error "Run %s of stack %s is not awaiting confirmation (state: %s)"
-                      id stack-id (or state "unknown")))
+        (unless action
+          (user-error "Run %s of stack %s cannot be discarded (state: %s)"
+                      id stack-id (or (spacelift-run-state run) "unknown")))
         (when (or spacelift-discard-no-prompt
-                  (yes-or-no-p (format "Discard run %s of stack %s? " id stack-id)))
-          (spacelift-run-discard run)
-          (message "Discarded run %s" id)
+                  (yes-or-no-p (format "%s run %s of stack %s? "
+                                       (car action) id stack-id)))
+          (funcall (cdr action) run)
+          (message "%s run %s: done" (car action) id)
           t)))))
 
 (defun spacelift-stack-list-discard ()
@@ -1534,16 +1535,16 @@ confirmation first."
   (let ((run (spacelift--run-at-point-or-current)))
     (unless run
       (user-error "No run at point or in the current buffer"))
-    (let ((state (spacelift-run-state run))
+    (let ((action (spacelift-run-discard-action run))
           (id (spacelift-run-id run)))
-      (unless (equal state "UNCONFIRMED")
-        (user-error "Run %s is not awaiting confirmation (state: %s)"
-                    id (or state "unknown")))
+      (unless action
+        (user-error "Run %s cannot be discarded (state: %s)"
+                    id (or (spacelift-run-state run) "unknown")))
       (when (or spacelift-discard-no-prompt
-                (yes-or-no-p (format "Discard run %s? " id)))
+                (yes-or-no-p (format "%s run %s? " (car action) id)))
         (spacelift-with-auth
-          (spacelift-run-discard run)
-          (message "Discarded run %s" id)
+          (funcall (cdr action) run)
+          (message "%s run %s: done" (car action) id)
           (cond
            ((derived-mode-p 'spacelift-run-list-mode)
             (spacelift-run-list-refresh))
