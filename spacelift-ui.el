@@ -124,7 +124,7 @@
 
 ;;; Customization
 
-(defcustom spacelift-stack-line-format "%-30n  %-10s  %-18a  %-20p  %l"
+(defcustom spacelift-stack-line-format "%-30n  %-10s  %-2L  %-18a  %-20p  %l"
   "Format string for a stack line in the stack list buffer.
 The following `format-spec' style specifiers are available:
 
@@ -138,6 +138,8 @@ The following `format-spec' style specifiers are available:
       the stack, otherwise the tracked commit; falling back to login)
   %c  short commit hash (the blocking run's commit when a run is
       blocking the stack, otherwise the tracked commit)
+  %L  `spacelift-stack-lock-symbol' when locked (bold when held by the current user;
+      the owner is shown via eldoc/tooltip at point)
   %p  worker pool name
   %r  repository
   %S  space name
@@ -145,6 +147,11 @@ The following `format-spec' style specifiers are available:
   %l  comma-separated labels
 
 Width and alignment flags (e.g. %-30n) are supported."
+  :type 'string
+  :group 'spacelift)
+
+(defcustom spacelift-stack-lock-symbol "🔒"
+  "String shown by the %L specifier for locked stacks."
   :type 'string
   :group 'spacelift)
 
@@ -291,6 +298,11 @@ Width and alignment flags (e.g. %-12s) are supported."
                                   (spacelift-commit-login commit)))
                   ""))
        (?c . ,(spacelift--short-hash commit))
+       (?L . ,(let ((owner (spacelift-stack-locked stack)))
+                (if (null owner) ""
+                  (propertize spacelift-stack-lock-symbol 'help-echo (format "Locked by %s" owner)
+                              'face (and (equal owner (spacelift-current-user-login))
+                                         'bold)))))
        (?p . ,(or (spacelift-stack-worker-pool-name stack) ""))
        (?r . ,(or (spacelift-stack-repository stack) ""))
        (?S . ,(or (spacelift-stack-space-name stack) ""))
@@ -571,7 +583,14 @@ Width and alignment flags (e.g. %-12s) are supported."
 
 \\{spacelift-stack-list-mode-map}"
   (setq-local truncate-lines t)
+  (add-hook 'eldoc-documentation-functions #'spacelift--help-echo-eldoc nil t)
+  (eldoc-mode 1)
   (hl-line-mode 1))
+
+(defun spacelift--help-echo-eldoc (&rest _)
+  "Return the `help-echo' string at point for `eldoc'."
+  (let ((echo (get-text-property (point) 'help-echo)))
+    (and (stringp echo) echo)))
 
 (defun spacelift--insert-stack-list (stacks)
   "Insert STACKS into the current buffer, one per line."

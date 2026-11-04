@@ -139,30 +139,31 @@ current/blocking run; otherwise return the stack's tracked branch."
          (spacelift--alist-get 'commit blocker))))
 
 (defun spacelift-stack--blocker-map ()
-  "Return a hash of stack id to blocker run alist for all blocked stacks.
-Fetched in a single GraphQL call; stacks without a blocking run are
-omitted."
+  "Return a hash of stack id to its GraphQL alist (lockedBy, blocker).
+Fetched in a single GraphQL call."
   (let ((data (spacelift--run-graphql
-               (format "{ stacks { id blocker { %s } } }"
+               (format "{ stacks { id lockedBy blocker { %s } } }"
                        spacelift-stack--blocker-fields)))
         (map (make-hash-table :test 'equal)))
     (dolist (stack (spacelift--alist-get 'stacks data))
-      (let ((id (spacelift--alist-get 'id stack))
-            (blocker (spacelift--alist-get 'blocker stack)))
-        (when (and id blocker)
-          (puthash id blocker map))))
+      (let ((id (spacelift--alist-get 'id stack)))
+        (when id
+          (puthash id stack map))))
     map))
 
 (defun spacelift-stack--enrich-blockers (stacks)
-  "Populate the blocker slots of each blocked stack in STACKS, in place.
-When no stack in STACKS is blocked, no GraphQL call is made.  Return
-STACKS."
-  (when (seq-some #'spacelift-stack-blocker-id stacks)
+  "Populate the lock and blocker slots of each stack in STACKS, in place.
+Return STACKS."
+  (when stacks
     (let ((map (spacelift-stack--blocker-map)))
       (dolist (stack stacks)
-        (when (spacelift-stack-blocker-id stack)
-          (spacelift-stack--set-blocker
-           stack (gethash (spacelift-stack-id stack) map))))))
+        (let ((extra (gethash (spacelift-stack-id stack) map)))
+          (setf (spacelift-stack-locked stack)
+                (spacelift--alist-get 'lockedBy extra))
+          (when (and (spacelift-stack-blocker-id stack)
+                     (spacelift--alist-get 'blocker extra))
+            (spacelift-stack--set-blocker
+             stack (spacelift--alist-get 'blocker extra)))))))
   stacks)
 
 (defun spacelift-stack-list (&optional search limit)
