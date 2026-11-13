@@ -1654,29 +1654,80 @@ Pulumi resource blocks fold like outline headings.
   (setq-local truncate-lines nil)
   ;; Every non-blank line is a heading, so folding follows indentation.
   (setq-local outline-regexp " *[^ \n]")
-  (setq-local outline-level #'current-indentation)
+  (setq-local outline-level #'spacelift--run-log-outline-level)
   (outline-minor-mode 1)
+  ;; Ellipses are drawn by `spacelift--run-log-label-folds' to append closers.
+  (setq buffer-display-table (make-display-table))
+  (set-display-table-slot buffer-display-table 'selective-display [])
   (add-hook 'outline-view-change-hook #'spacelift--run-log-label-folds nil t))
 
+(defconst spacelift--run-log-phase-regexp "^\\([A-Z_]+\\)\\(?:[,\t]\\|$\\)"
+  "Regexp matching a spacectl run phase line; group 1 is the phase.")
+
+(defvar-local spacelift--log-phases-folded nil
+  "Whether phases preceding PLANNING were already folded.")
+
+(defun spacelift--run-log-outline-level ()
+  "Return the outline level: phases on top, then indentation."
+  (cond ((looking-at spacelift--run-log-phase-regexp) 0)
+        ;; Closing brackets belong to the block they close.
+        ((looking-at " *[]})],?$") (+ 2 (current-indentation)))
+        (t (1+ (current-indentation)))))
+
+(defun spacelift--run-log-fold-phases ()
+  "Fold the phases preceding PLANNING, once PLANNING has been reached."
+  (unless spacelift--log-phases-folded
+    (let (phases planning)
+      (save-excursion
+        (goto-char (point-min))
+        (while (and (not planning)
+                    (re-search-forward spacelift--run-log-phase-regexp nil t))
+          (push (line-beginning-position) phases)
+          (setq planning (equal (match-string 1) "PLANNING")))
+        (when planning
+          (setq spacelift--log-phases-folded t)
+          ;; Fold each phase body: from after its trailing separator to
+          ;; before the next phase's leading separator.
+          (let ((next (car phases)))
+            (dolist (pos (cdr phases))
+              (goto-char pos)
+              (forward-line 1)
+              (when (looking-at "^-+$") (forward-line 1))
+              (let ((start (point)))
+                (goto-char next)
+                (forward-line -1)
+                (unless (looking-at "^-+$") (forward-line 1))
+                (when (< start (point))
+                  (outline-flag-region start (point) t)))
+              (setq next pos)))
+          (spacelift--run-log-label-folds))))))
+
 (defun spacelift--run-log-label-folds ()
-  "Show the URN name after each folded Pulumi resource header."
+  "Draw an ellipsis after each folded line.
+Pulumi resource headers also show their URN name, and lines opening a
+bracket show its closer."
   (remove-overlays (point-min) (point-max) 'spacelift-fold-label t)
   (save-excursion
     (goto-char (point-min))
-    (while (re-search-forward spacelift-run--plan-header-regexp nil t)
+    (while (not (eobp))
       (let ((eol (line-end-position)))
-        (when (and (< eol (point-max)) (outline-invisible-p (1+ eol)))
-          (let ((end (save-excursion
-                       (beginning-of-line)
-                       (outline-end-of-subtree)
-                       (point))))
-            (save-excursion
-              (when (re-search-forward "\\[urn=[^]\n]*::\\([^]\n]+\\)\\]" end t)
-                (let ((ov (make-overlay eol eol)))
-                  (overlay-put ov 'spacelift-fold-label t)
-                  (overlay-put ov 'before-string
-                               (propertize (concat " " (match-string 1))
-                                           'face 'shadow)))))))))))
+        (when (and (< eol (point-max))
+                   (not (outline-invisible-p (point)))
+                   (outline-invisible-p (1+ eol)))
+          (let* ((name (and (looking-at spacelift-run--plan-header-regexp)
+                            (save-excursion
+                              (forward-line 1)
+                              (and (looking-at
+                                    " *\\[urn=[^]\n]*::\\([^]\n]+\\)\\]")
+                                   (concat " " (match-string 1))))))
+                 (closer (pcase (char-before eol)
+                           (?\{ "}") (?\[ "]") (?\( ")")))
+                 (ov (make-overlay eol eol)))
+            (overlay-put ov 'spacelift-fold-label t)
+            (overlay-put ov 'before-string
+                         (concat (and name (propertize name 'face 'shadow))
+                                 "..." closer)))))
+      (forward-line 1))))
 
 (defun spacelift--run-log-buffer-name (stack-id run)
   "Return the log buffer name for RUN under STACK-ID.
@@ -1698,6 +1749,7 @@ When RUN is nil, the buffer name refers to the stack's latest run."
             (let ((start (point)))
               (insert string)
               (ansi-color-apply-on-region start (point))))
+          (spacelift--run-log-fold-phases)
           ;; Follow output when point was already at the end.
           (when at-end
             (goto-char (point-max))
@@ -1718,12 +1770,26 @@ When RUN is nil, the buffer name refers to the stack's latest run."
           (spacelift--run-log-fold-all))))))
 
 (defun spacelift--run-log-fold-all ()
-  "Fold every Pulumi resource block in the current buffer."
+  "Fold every Pulumi resource block and unchanged output in the buffer."
   (let (headers)
     (save-excursion
       (goto-char (point-min))
       (while (re-search-forward spacelift-run--plan-header-regexp nil t)
-        (push (line-beginning-position) headers)))
+        (push (line-beginning-position) headers))
+      (goto-char (point-min))
+      (while (re-search-forward "^\\( *\\)Outputs:$" nil t)
+        (let ((base (length (match-string 1))) col)
+          (forward-line 1)
+          (while (and (not (eobp))
+                      (or (looking-at " *$") (> (current-indentation) base)))
+            (when (looking-at "\\( *\\)\\([-+~]\\{1,2\\} \\)?\\([^ \n].*\\)$")
+              (let ((c (+ (length (match-string 1))
+                          (length (or (match-string 2) "")))))
+                (unless col (setq col c))
+                (when (and (= c col) (not (match-string 2))
+                           (string-match-p "[{[(]$" (match-string 3)))
+                  (push (line-beginning-position) headers))))
+            (forward-line 1)))))
     ;; Deepest-first: hiding a parent first would hide its child headings.
     (let ((outline-view-change-hook nil))
       (save-excursion
@@ -1740,6 +1806,7 @@ run of STACK-ID."
     (when (and existing (process-live-p existing))
       (delete-process existing)))
   (with-current-buffer buffer
+    (setq spacelift--log-phases-folded nil)
     (let ((inhibit-read-only t))
       (erase-buffer)
       (insert (propertize

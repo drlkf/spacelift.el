@@ -415,7 +415,8 @@
                 (delq nil (mapcar (lambda (ov) (overlay-get ov 'before-string))
                                   (overlays-in (point-min) (point-max))))))
       (outline-toggle-children)
-      (should (equal (labels) '(" my-queue")))
+      (should (equal (mapcar #'substring-no-properties (labels))
+                     '(" my-queue...")))
       (outline-toggle-children)
       (should-not (labels)))))
 
@@ -454,4 +455,56 @@
     (forward-line 2)
     (should-not (invisible-p (point)))
     (forward-line 1)
+    (should-not (invisible-p (point)))))
+
+(ert-deftest spacelift-run-log-fold-hides-closer ()
+  (with-temp-buffer
+    (insert "        a.ts : {\n"
+            "            x: 1\n"
+            "        }\n"
+            "        b    : \"v\"\n")
+    (spacelift-run-log-mode)
+    (goto-char (point-min))
+    (outline-toggle-children)
+    (forward-line 2)
+    (should (invisible-p (point)))
+    (forward-line 1)
+    (should-not (invisible-p (point)))
+    (should (equal (delq nil (mapcar (lambda (ov) (overlay-get ov 'before-string))
+                                     (overlays-in (point-min) (point-max))))
+                   '("...}")))))
+
+(ert-deftest spacelift-run-log-fold-all-folds-unchanged-outputs ()
+  (with-temp-buffer
+    (insert "    Outputs:\n"
+            "        a : {\n"
+            "            x: 1\n"
+            "        }\n"
+            "      ~ b : {\n"
+            "            y: 2\n"
+            "        }\n")
+    (spacelift-run-log-mode)
+    (spacelift--run-log-fold-all)
+    (goto-char (point-min))
+    (forward-line 2)
+    (should (invisible-p (point)))
+    (forward-line 3)
+    (should-not (invisible-p (point)))))
+
+(ert-deftest spacelift-run-log-folds-phases-before-planning ()
+  (with-temp-buffer
+    (insert "-----------------\n"
+            "INITIALIZING\tFri Nov 13 10:00:00 UTC 2026\n"
+            "-----------------\n\n"
+            "init output\n"
+            "-----------------\n"
+            "PLANNING\tFri Nov 13 10:01:00 UTC 2026\n"
+            "-----------------\n\n"
+            "plan output\n")
+    (spacelift-run-log-mode)
+    (spacelift--run-log-fold-phases)
+    (goto-char (point-min))
+    (should (search-forward "init output" nil t))
+    (should (invisible-p (point)))
+    (should (search-forward "plan output" nil t))
     (should-not (invisible-p (point)))))
